@@ -1,16 +1,14 @@
 // =====================================================
-// TitanCap.OS - js/nav.js
-// Enrutamiento de pantallas (SPA) y menú de navegación
+// TitanCap.OS - js/nav.js (CORREGIDO - integración limpia)
 // =====================================================
 
-import { supabase } from './supabase-client.js';
 import { checkSession, renderAuthForm, signOut } from './auth.js';
 import { renderProfileForm } from './profile.js';
 import { renderDashboard } from './dashboard.js';
 import { renderWorkoutDay } from './workout.js';
 import { openSurvey } from './survey.js';
 
-// Mapa de pantallas
+// Referencias a los contenedores de pantalla
 const screens = {
   'loading-screen': document.getElementById('loading-screen'),
   'auth-screen': document.getElementById('auth-screen'),
@@ -19,17 +17,23 @@ const screens = {
   'workout-screen': document.getElementById('workout-screen'),
 };
 
-// Cambiar de pantalla
+/**
+ * Cambia a una pantalla específica y ejecuta su lógica de renderizado.
+ * @param {string} screenId - ID de la pantalla a mostrar.
+ * @param {object} [data] - Datos adicionales (ej. dayId para workout-screen).
+ */
 export function showScreen(screenId, data = null) {
   // Ocultar todas las pantallas
   Object.values(screens).forEach(s => s?.classList.remove('active'));
-  // Cerrar modal si está abierto
-  document.getElementById('survey-modal')?.classList.remove('active');
+  // Cerrar modal de encuesta si estuviera abierto
+  const modal = document.getElementById('survey-modal');
+  if (modal) modal.classList.remove('active');
   
+  // Mostrar la pantalla solicitada
   const target = screens[screenId];
   if (target) target.classList.add('active');
 
-  // Renderizar contenido según pantalla
+  // Disparar la función de renderizado correspondiente
   switch (screenId) {
     case 'auth-screen':
       renderAuthForm();
@@ -46,36 +50,69 @@ export function showScreen(screenId, data = null) {
   }
 }
 
-// Navegación hacia un día de entrenamiento
+/**
+ * Navega a la pantalla de entrenamiento del día.
+ * @param {string} dayId - ID del workout_day en Supabase.
+ */
 export function navigateToDay(dayId) {
   showScreen('workout-screen', { dayId });
 }
 
-// Abrir encuesta desde cualquier lugar
+/**
+ * Abre el modal de encuesta de fatiga para una semana concreta.
+ * @param {string} weekId - ID del weekly_program en Supabase.
+ */
 export function showSurvey(weekId) {
   openSurvey(weekId);
 }
 
-// Cerrar sesión
+/**
+ * Cierra sesión y vuelve a la pantalla de autenticación.
+ */
 export async function logout() {
   await signOut();
   showScreen('auth-screen');
 }
 
-// Inicializar la app
-export async function initApp() {
-  // Pantalla de carga rápida
+/**
+ * Inicializa la aplicación:
+ * 1. Muestra pantalla de carga.
+ * 2. Verifica sesión en Supabase.
+ * 3. Redirige a la pantalla correcta (auth, perfil o dashboard).
+ * Incluye un timeout de seguridad por si la verificación se bloquea.
+ */
+export function initApp() {
   showScreen('loading-screen');
-  
-  // Verificar sesión existente
-  await checkSession();
-  
-  // Ocultar loading tras breve pausa para transición suave
-  setTimeout(() => {
-    const loading = screens['loading-screen'];
-    if (loading?.classList.contains('active')) {
-      // Si sigue en loading, mostrar auth
+
+  // Timeout de seguridad: si tras 6 segundos sigue en loading, forzamos auth
+  let resolved = false;
+  const safetyTimeout = setTimeout(() => {
+    if (!resolved && screens['loading-screen']?.classList.contains('active')) {
+      console.warn('Timeout de verificación alcanzado. Mostrando auth por seguridad.');
       showScreen('auth-screen');
     }
-  }, 1000);
+  }, 6000);
+
+  // Verificar sesión
+  checkSession()
+    .then(sessionData => {
+      resolved = true;
+      clearTimeout(safetyTimeout);
+      if (!sessionData) {
+        // No hay sesión activa
+        showScreen('auth-screen');
+      } else if (!sessionData.hasProfile) {
+        // Sesión activa pero falta perfil de atleta
+        showScreen('profile-screen');
+      } else {
+        // Sesión activa con perfil completo -> Dashboard
+        showScreen('dashboard-screen');
+      }
+    })
+    .catch(error => {
+      resolved = true;
+      clearTimeout(safetyTimeout);
+      console.error('Error en initApp:', error);
+      showScreen('auth-screen');
+    });
 }
