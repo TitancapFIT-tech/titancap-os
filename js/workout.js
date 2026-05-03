@@ -1,14 +1,16 @@
 // =====================================================
-// TitanCap.OS - js/workout.js
-// Visualización diaria y registro interactivo de series
+// TitanCap.OS - js/workout.js (v2 - Back + Finish + UI)
 // =====================================================
 
 import { supabase } from './supabase-client.js';
 import { STRESS_INDEX_COEFFICIENTS } from './config.js';
+import { showScreen } from './nav.js'; // <-- IMPORTANTE para navegar
 
 let currentDayId = null;
 
-// Renderizar día de entrenamiento
+/**
+ * Renderiza el día de entrenamiento y activa los listeners
+ */
 export async function renderWorkoutDay(dayId) {
   currentDayId = dayId;
 
@@ -19,7 +21,7 @@ export async function renderWorkoutDay(dayId) {
     .eq('id', dayId)
     .single();
 
-  // Obtener ejercicios asignados a este día
+  // Obtener ejercicios asignados
   const { data: exercises, error } = await supabase
     .from('workout_exercises')
     .select('*, exercises(*)')
@@ -35,7 +37,7 @@ export async function renderWorkoutDay(dayId) {
   document.getElementById('dia-titulo').textContent =
     `Día ${dayData.day_number} · ${dayData.enfoque}`;
 
-  // Renderizar lista de ejercicios
+  // Contenedor de ejercicios
   const container = document.getElementById('ejercicios-container');
   container.innerHTML = '';
 
@@ -44,7 +46,7 @@ export async function renderWorkoutDay(dayId) {
     block.className = 'exercise-block';
     block.dataset.exerciseId = ex.id;
 
-    // Obtener series ya registradas para este ejercicio
+    // Series ya registradas
     const { data: sets } = await supabase
       .from('workout_sets')
       .select('*')
@@ -64,8 +66,7 @@ export async function renderWorkoutDay(dayId) {
           <input type="number" class="rpe-input" placeholder="RPE"
             value="${existingSet?.rpe_reportado || ex.rpe_objetivo || ''}"
             step="0.5" min="5" max="10">
-          <div class="check-btn ${existingSet?.completed ? 'checked' : ''}"
-            data-set="${setNumber}"></div>
+          <div class="check-btn ${existingSet?.completed ? 'checked' : ''}" data-set="${setNumber}"></div>
         </div>
       `;
     }).join('');
@@ -73,25 +74,26 @@ export async function renderWorkoutDay(dayId) {
     block.innerHTML = `
       <h3>${ex.exercises.nombre}</h3>
       <p class="meta">${ex.series_objetivo} series · ${ex.reps_min}-${ex.reps_max} reps · RIR ${ex.rir_objetivo}</p>
-      <div class="sets-container">
-        ${setsHtml}
-      </div>
+      <div class="sets-container">${setsHtml}</div>
       <div class="stress-indicator" style="font-size:0.75rem;color:#aaa;margin-top:6px;">
         Stress Index: <span id="stress-${ex.id}">--</span>
       </div>
     `;
     container.appendChild(block);
 
-    // Actualizar stress index inicial
-    updateStressIndex(ex.id, ex.exercises.tipo, ex.series_objetivo);
+    // Calcular stress index inicial
+    updateStressIndex(ex.id, ex.exercises.tipo);
   }
 
-  // Event listeners para checks y inputs
-  attachListeners(dayId);
+  // Activar listeners de interacción
+  attachAllListeners(dayId);
 }
 
-function attachListeners(dayId) {
-  // Botones check
+/**
+ * Conecta los eventos de checkboxes, inputs y botones
+ */
+function attachAllListeners(dayId) {
+  // 1. Botones de check por serie
   document.querySelectorAll('.check-btn').forEach(btn => {
     btn.addEventListener('click', async function () {
       this.classList.toggle('checked');
@@ -99,8 +101,7 @@ function attachListeners(dayId) {
 
       const setRow = this.closest('.set-row');
       const setNumber = parseInt(setRow.dataset.set);
-      const exerciseBlock = this.closest('.exercise-block');
-      const exerciseId = exerciseBlock.dataset.exerciseId;
+      const exerciseId = this.closest('.exercise-block').dataset.exerciseId;
 
       const weight = parseFloat(setRow.querySelector('.weight-input').value) || 0;
       const reps = parseInt(setRow.querySelector('.reps-input').value) || 0;
@@ -114,134 +115,123 @@ function attachListeners(dayId) {
 
       const rir = Math.max(0, 10 - rpe);
 
-      // Guardar o actualizar serie en Supabase
-      const { data: existing } = await supabase
+      // Upsert automático en workout_sets
+      await supabase
         .from('workout_sets')
-        .select('id')
-        .eq('workout_exercise_id', exerciseId)
-        .eq('set_number', setNumber)
-        .single();
+        .upsert({
+          workout_exercise_id: exerciseId,
+          set_number: setNumber,
+          reps_completadas: reps,
+          peso_kg: weight,
+          rpe_reportado: rpe,
+          rir_reportado: rir,
+          completed: this.classList.contains('checked')
+        }, { onConflict: 'workout_exercise_id, set_number' });
 
-      if (existing) {
-        await supabase
-          .from('workout_sets')
-          .update({
-            reps_completadas: reps,
-            peso_kg: weight,
-            rpe_reportado: rpe,
-            rir_reportado: rir,
-            completed: this.classList.contains('checked')
-          })
-          .eq('id', existing.id);
-      } else {
-        await supabase
-          .from('workout_sets')
-          .insert({
-            workout_exercise_id: exerciseId,
-            set_number: setNumber,
-            reps_completadas: reps,
-            peso_kg: weight,
-            rpe_reportado: rpe,
-            rir_reportado: rir,
-            completed: this.classList.contains('checked')
-          });
-      }
-
-      // Actualizar stress index
-      const tipo = exerciseBlock.querySelector('.meta')?.dataset?.tipo;
-      updateStressIndex(exerciseId, null, null);
+      updateStressIndex(exerciseId);
     });
   });
 
-  // Inputs de peso/reps/RPE actualizan automáticamente
+  // 2. Recalcular stress al cambiar peso/reps/rpe
   document.querySelectorAll('.weight-input, .reps-input, .rpe-input').forEach(input => {
     input.addEventListener('change', function () {
-      const exerciseBlock = this.closest('.exercise-block');
-      const exerciseId = exerciseBlock.dataset.exerciseId;
-      updateStressIndex(exerciseId, null, null);
+      const exerciseId = this.closest('.exercise-block')?.dataset.exerciseId;
+      if (exerciseId) updateStressIndex(exerciseId);
     });
   });
 
-  // Botón Finalizar Día
-  document.getElementById('btn-finalizar-dia').addEventListener('click', async () => {
-    const allChecks = document.querySelectorAll('.check-btn');
-    const allChecked = Array.from(allChecks).every(cb => cb.classList.contains('checked'));
+  // 3. Botón "Día Completado"
+  const btnFinalizar = document.getElementById('btn-finalizar-dia');
+  if (btnFinalizar) {
+    btnFinalizar.replaceWith(btnFinalizar.cloneNode(true)); // limpiar listeners previos
+    document.getElementById('btn-finalizar-dia').addEventListener('click', async () => {
+      const allChecks = document.querySelectorAll('.check-btn');
+      const allChecked = Array.from(allChecks).every(cb => cb.classList.contains('checked'));
 
-    if (!allChecked) {
-      const confirmar = confirm('Hay series sin completar. ¿Finalizar día igualmente?');
-      if (!confirmar) return;
-    }
-
-    // Marcar día como completado
-    await supabase
-      .from('workout_days')
-      .update({ completed: true })
-      .eq('id', dayId);
-
-    // Verificar si toda la semana está completada
-    const { data: dayInfo } = await supabase
-      .from('workout_days')
-      .select('weekly_program_id')
-      .eq('id', dayId)
-      .single();
-
-    const { data: allDays } = await supabase
-      .from('workout_days')
-      .select('completed')
-      .eq('weekly_program_id', dayInfo.weekly_program_id);
-
-    const allDaysCompleted = allDays.every(d => d.completed);
-
-    if (allDaysCompleted) {
-      if (confirm('¡Has completado todos los días de esta semana! ¿Rellenar encuesta de fatiga?')) {
-        showScreen('survey-modal');
+      if (!allChecked) {
+        const confirmar = confirm('Hay series sin completar. ¿Finalizar día igualmente?');
+        if (!confirmar) return;
       }
-    }
 
-    showScreen('dashboard-screen');
-  });
+      // Marcar día como completado
+      await supabase.from('workout_days')
+        .update({ completed: true })
+        .eq('id', dayId);
+
+      // Verificar si toda la semana está lista
+      const { data: dayInfo } = await supabase
+        .from('workout_days')
+        .select('weekly_program_id')
+        .eq('id', dayId)
+        .single();
+
+      const { data: allDays } = await supabase
+        .from('workout_days')
+        .select('completed')
+        .eq('weekly_program_id', dayInfo.weekly_program_id);
+
+      const semanaCompleta = allDays.every(d => d.completed);
+
+      if (semanaCompleta) {
+        if (confirm('¡Semana completada! ¿Rellenar encuesta de fatiga?')) {
+          const { openSurvey } = await import('./survey.js');
+          openSurvey(dayInfo.weekly_program_id);
+        }
+      }
+
+      // Volver al dashboard (se actualizará automáticamente)
+      showScreen('dashboard-screen');
+    });
+  }
+
+  // 4. Botón "Volver" (back) - CORREGIDO
+  const btnBack = document.getElementById('btn-back');
+  if (btnBack) {
+    btnBack.replaceWith(btnBack.cloneNode(true)); // limpiar listeners previos
+    document.getElementById('btn-back').addEventListener('click', () => {
+      showScreen('dashboard-screen');
+    });
+  }
 }
 
-// Calcular y mostrar el stress index de un ejercicio
-async function updateStressIndex(exerciseId, tipoOverride, seriesOverride) {
+/**
+ * Calcula y muestra el índice de estrés de un ejercicio
+ */
+async function updateStressIndex(exerciseId) {
   const { data: sets } = await supabase
     .from('workout_sets')
     .select('rir_reportado')
     .eq('workout_exercise_id', exerciseId);
 
-  const { data: exerciseInfo } = await supabase
+  const { data: exInfo } = await supabase
     .from('workout_exercises')
     .select('*, exercises(tipo)')
     .eq('id', exerciseId)
     .single();
 
-  if (!exerciseInfo) return;
+  if (!exInfo) return;
 
-  const tipo = tipoOverride || exerciseInfo.exercises.tipo;
-  const coef = STRESS_INDEX_COEFFICIENTS[tipo] || STRESS_INDEX_COEFFICIENTS.mono_libre;
-  const totalSets = seriesOverride || exerciseInfo.series_objetivo;
+  const tipo = exInfo.exercises.tipo;
+  const coef = STRESS_INDEX_COEFFICIENTS[tipo] || STRESS_INDEX_COEFFICIENTS.mono_maquina;
+  let total = 0;
 
-  let totalStress = 0;
-  if (sets) {
+  if (sets && sets.length > 0) {
     sets.forEach(s => {
-      const rir = s.rir_reportado || 2;
-      const stress = Math.max(0.1, coef.intercept + coef.slope * rir);
-      totalStress += stress;
+      const rir = s.rir_reportado != null ? s.rir_reportado : 2;
+      total += Math.max(0.1, coef.intercept + coef.slope * rir);
     });
-  } else {
-    // Si no hay sets registrados, estimar con RIR objetivo
-    const rirEst = exerciseInfo.rir_objetivo || 2;
-    totalStress = totalSets * Math.max(0.1, coef.intercept + coef.slope * rirEst);
   }
 
   const span = document.getElementById(`stress-${exerciseId}`);
   if (span) {
-    span.textContent = totalStress.toFixed(1);
-    span.style.color = totalStress > 4 ? '#e53935' : '#4caf50';
+    span.textContent = total.toFixed(1);
+    span.style.color = total > 4 ? '#e53935' : '#4caf50';
   }
 }
 
-// Sonido de check
+/**
+ * Efecto de sonido al marcar un check
+ */
 function playCheckSound() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -253,7 +243,7 @@ function playCheckSound() {
     osc.frequency.setValueAtTime(880, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(1100, ctx.currentTime + 0.08);
     gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.15);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
     osc.start();
     osc.stop(ctx.currentTime + 0.15);
   } catch (e) { /* silencioso */ }
