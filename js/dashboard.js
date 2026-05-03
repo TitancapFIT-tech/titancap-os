@@ -1,6 +1,5 @@
 // =====================================================
-// TitanCap.OS - js/dashboard.js
-// Dashboard principal: saludo, frase, días de la semana
+// TitanCap.OS - js/dashboard.js (v2 - Frases + Refresco)
 // =====================================================
 
 import { supabase } from './supabase-client.js';
@@ -9,7 +8,12 @@ import { showScreen, navigateToDay, showSurvey, logout } from './nav.js';
 let currentWeekId = null;
 let currentWeekNumber = null;
 
-// Renderizar dashboard
+/**
+ * Renderiza el dashboard principal:
+ * - Saludo personalizado
+ * - Frase motivacional aleatoria
+ * - Días de entrenamiento de la semana activa
+ */
 export async function renderDashboard() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -17,7 +21,7 @@ export async function renderDashboard() {
     return;
   }
 
-  // Obtener perfil
+  // Obtener perfil (nombre)
   const { data: perfil } = await supabase
     .from('profiles')
     .select('nombre')
@@ -44,18 +48,11 @@ export async function renderDashboard() {
 
   // Saludo personalizado
   const nombre = perfil?.nombre || 'Atleta';
-  document.getElementById('saludo-personalizado').textContent = 
+  document.getElementById('saludo-personalizado').textContent =
     `Hola ${nombre}, es hora de tu Semana ${currentWeekNumber}`;
 
-  // Frase motivacional aleatoria
-  const { data: phrases } = await supabase
-    .from('motivational_phrases')
-    .select('phrase, author');
-  if (phrases && phrases.length > 0) {
-    const random = phrases[Math.floor(Math.random() * phrases.length)];
-    document.getElementById('frase-motivacional').textContent = 
-      `"${random.phrase}" — ${random.author}`;
-  }
+  // Cargar y mostrar frase motivacional aleatoria
+  cargarFraseMotivacional();
 
   // Obtener los días de la semana activa
   const { data: days, error: daysError } = await supabase
@@ -75,8 +72,7 @@ export async function renderDashboard() {
 
   days.forEach(day => {
     const card = document.createElement('div');
-    card.className = 'day-card';
-    if (day.completed) card.classList.add('completed');
+    card.className = 'day-card' + (day.completed ? ' completed' : '');
     card.innerHTML = `
       <h3>Día ${day.day_number}</h3>
       <p>${day.enfoque || ''}</p>
@@ -88,7 +84,7 @@ export async function renderDashboard() {
     container.appendChild(card);
   });
 
-  // Verificar si todos los días están completados para mostrar botón de encuesta
+  // Configurar botón "Semana Completada"
   const allCompleted = days.every(d => d.completed);
   const btnCompletar = document.getElementById('btn-completar-semana');
   if (allCompleted) {
@@ -99,16 +95,47 @@ export async function renderDashboard() {
     btnCompletar.onclick = () => alert('Completa todos los días antes de enviar la encuesta.');
   }
 
-  // Botón de reiniciar (elimina datos de la semana actual y vuelve a empezar)
+  // Botón de reinicio
   document.getElementById('btn-reiniciar').onclick = async () => {
     if (confirm('¿Reiniciar todo? Perderás el progreso de esta semana y empezarás de nuevo.')) {
       await supabase.from('weekly_programs').delete().eq('id', currentWeekId);
-      // Redirigir a perfil para volver a generar primera semana
       showScreen('profile-screen');
     }
   };
 
-  // Botón de cerrar sesión (lo añadimos en la esquina superior)
+  // Botón de cerrar sesión
   const logoutBtn = document.getElementById('btn-logout');
   if (logoutBtn) logoutBtn.onclick = () => logout();
+}
+
+/**
+ * Obtiene una frase aleatoria de la tabla motivational_phrases y la muestra.
+ */
+async function cargarFraseMotivacional() {
+  const fraseEl = document.getElementById('frase-motivacional');
+  if (!fraseEl) return;
+
+  try {
+    // Obtener frases de Supabase
+    const { data: phrases, error } = await supabase
+      .from('motivational_phrases')
+      .select('phrase, author');
+
+    if (error) throw error;
+
+    if (phrases && phrases.length > 0) {
+      const random = phrases[Math.floor(Math.random() * phrases.length)];
+      fraseEl.textContent = `"${random.phrase}" — ${random.author}`;
+      fraseEl.style.display = 'block';
+    } else {
+      // Respaldo: frase estática si la tabla está vacía
+      fraseEl.textContent = '"El dolor de la disciplina no es nada comparado con el dolor del arrepentimiento." — Anónimo';
+      fraseEl.style.display = 'block';
+    }
+  } catch (err) {
+    console.warn('Error cargando frase motivacional:', err.message);
+    // Mostrar frase de respaldo
+    fraseEl.textContent = '"La disciplina es el puente entre las metas y los logros." — Jim Rohn';
+    fraseEl.style.display = 'block';
+  }
 }
