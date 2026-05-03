@@ -1,10 +1,10 @@
 // =====================================================
-// TitanCap.OS - js/profile.js (VERSIÓN FINAL - ROBUSTA)
+// TitanCap.OS - js/profile.js (FORMULARIO CORREGIDO)
 // =====================================================
 
 import { supabase } from './supabase-client.js';
 import { generateFirstWeek } from './generator.js';
-import { EXERCISES } from './config.js'; // Catálogo local con nombres
+import { EXERCISES } from './config.js';
 
 const grupoNames = {
   pecho: 'Pecho', espalda: 'Espalda', deltoides: 'Hombros',
@@ -14,12 +14,11 @@ const grupoNames = {
 };
 
 export async function renderProfileForm() {
-  const container = document.getElementById('profile-form');
-  if (!container) return;
+  const formContainer = document.getElementById('profile-form'); // es un <form>
+  if (!formContainer) return;
 
-  // Usamos el catálogo local para la UI
+  // Catálogo local para la interfaz
   const exercises = EXERCISES.map((ex, idx) => ({ ...ex, localId: idx + 1 }));
-
   console.log('Ejercicios cargados desde catálogo local:', exercises.length);
 
   const grouped = {};
@@ -28,87 +27,91 @@ export async function renderProfileForm() {
     grouped[ex.grupo_muscular].push(ex);
   });
 
-  container.innerHTML = `
+  // Construir el interior del formulario (sin <form> anidado)
+  formContainer.innerHTML = `
     <h2 style="margin-bottom: 20px;">🔧 Configuración de tu perfil</h2>
-    <form id="profile-form-inner">
-      <div class="section">
-        <h3>Datos básicos</h3>
-        <div class="input-group"><label>Nombre</label><input type="text" id="nombre" required></div>
-        <div class="input-row">
-          <div class="input-group"><label>Edad</label><input type="number" id="edad" min="14" max="80" required></div>
-          <div class="input-group"><label>Peso (kg)</label><input type="number" id="peso" step="0.1" required></div>
-          <div class="input-group"><label>Estatura (cm)</label><input type="number" id="estatura" required></div>
-        </div>
-        <div class="input-group">
-          <label>Género</label>
-          <select id="genero"><option value="masculino">Masculino</option><option value="femenino">Femenino</option></select>
-        </div>
+
+    <div class="section">
+      <h3>Datos básicos</h3>
+      <div class="input-group"><label>Nombre</label><input type="text" id="nombre" required></div>
+      <div class="input-row">
+        <div class="input-group"><label>Edad</label><input type="number" id="edad" min="14" max="80" required></div>
+        <div class="input-group"><label>Peso (kg)</label><input type="number" id="peso" step="0.1" required></div>
+        <div class="input-group"><label>Estatura (cm)</label><input type="number" id="estatura" required></div>
       </div>
-      <div class="section">
-        <h3>Experiencia y nutrición</h3>
-        <div class="input-group">
-          <label>Experiencia en gimnasio</label>
-          <select id="experiencia">
-            <option value="1">Menos de 6 meses</option>
-            <option value="6">6 meses - 1 año</option>
-            <option value="12" selected>1 - 2 años</option>
-            <option value="24">2 - 4 años</option>
-            <option value="48">Más de 4 años</option>
-          </select>
-        </div>
-        <div class="input-group">
-          <label>Dieta actual</label>
-          <select id="dieta">
-            <option value="deficit">Déficit calórico</option>
-            <option value="mantenimiento" selected>Mantenimiento</option>
-            <option value="superavit">Superávit calórico</option>
-          </select>
-        </div>
-        <div class="input-group">
-          <label>Horas de sueño promedio</label>
-          <input type="number" id="horas_sueno" min="4" max="12" step="0.5" value="7">
-        </div>
+      <div class="input-group">
+        <label>Género</label>
+        <select id="genero"><option value="masculino">Masculino</option><option value="femenino">Femenino</option></select>
       </div>
-      <div class="section">
-        <h3>1RM en ejercicios básicos (kg)</h3>
-        <div class="input-row">
-          <div class="input-group"><label>Sentadilla</label><input type="number" id="rm_sentadilla" step="0.5" placeholder="0"></div>
-          <div class="input-group"><label>Press Banca</label><input type="number" id="rm_banca" step="0.5" placeholder="0"></div>
-          <div class="input-group"><label>Peso Muerto</label><input type="number" id="rm_peso_muerto" step="0.5" placeholder="0"></div>
-        </div>
+    </div>
+
+    <div class="section">
+      <h3>Experiencia y nutrición</h3>
+      <div class="input-group">
+        <label>Experiencia en gimnasio</label>
+        <select id="experiencia">
+          <option value="1">Menos de 6 meses</option>
+          <option value="6">6 meses - 1 año</option>
+          <option value="12" selected>1 - 2 años</option>
+          <option value="24">2 - 4 años</option>
+          <option value="48">Más de 4 años</option>
+        </select>
       </div>
-      <div class="section">
-        <h3>Objetivo y disponibilidad</h3>
-        <div class="input-group">
-          <label>Objetivo principal</label>
-          <select id="objetivo">
-            <option value="hipertrofia">Ganar masa muscular</option>
-            <option value="fuerza">Fuerza máxima en básicos</option>
-            <option value="mixto" selected>Mixto (fuerza + hipertrofia)</option>
-          </select>
-        </div>
-        <div class="input-row">
-          <div class="input-group"><label>Días/semana</label><input type="number" id="dias_disponibles" min="2" max="6" value="4"></div>
-          <div class="input-group"><label>Minutos/sesión</label><input type="number" id="tiempo_sesion" min="30" max="120" value="60"></div>
-        </div>
-        <div class="input-group">
-          <label>Preferencia de esfuerzo</label>
-          <select id="preferencia_fallo">
-            <option value="siempre_fallo">Siempre al fallo</option>
-            <option value="rir_1_3" selected>Dejo 1-3 repeticiones en reserva</option>
-          </select>
-        </div>
+      <div class="input-group">
+        <label>Dieta actual</label>
+        <select id="dieta">
+          <option value="deficit">Déficit calórico</option>
+          <option value="mantenimiento" selected>Mantenimiento</option>
+          <option value="superavit">Superávit calórico</option>
+        </select>
       </div>
-      <div class="section">
-        <h3>Equipamiento disponible</h3>
-        <p style="font-size: 0.85rem; color: #aaa;">Marca los ejercicios/equipos que tienes</p>
-        <div id="equipment-groups"></div>
+      <div class="input-group">
+        <label>Horas de sueño promedio</label><input type="number" id="horas_sueno" min="4" max="12" step="0.5" value="7">
       </div>
-      <button type="submit" class="btn-primary" style="margin-top: 20px;">Generar mi Primera Semana</button>
-    </form>
+    </div>
+
+    <div class="section">
+      <h3>1RM en ejercicios básicos (kg)</h3>
+      <div class="input-row">
+        <div class="input-group"><label>Sentadilla</label><input type="number" id="rm_sentadilla" step="0.5" placeholder="0"></div>
+        <div class="input-group"><label>Press Banca</label><input type="number" id="rm_banca" step="0.5" placeholder="0"></div>
+        <div class="input-group"><label>Peso Muerto</label><input type="number" id="rm_peso_muerto" step="0.5" placeholder="0"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Objetivo y disponibilidad</h3>
+      <div class="input-group">
+        <label>Objetivo principal</label>
+        <select id="objetivo">
+          <option value="hipertrofia">Ganar masa muscular</option>
+          <option value="fuerza">Fuerza máxima en básicos</option>
+          <option value="mixto" selected>Mixto (fuerza + hipertrofia)</option>
+        </select>
+      </div>
+      <div class="input-row">
+        <div class="input-group"><label>Días/semana</label><input type="number" id="dias_disponibles" min="2" max="6" value="4"></div>
+        <div class="input-group"><label>Minutos/sesión</label><input type="number" id="tiempo_sesion" min="30" max="120" value="60"></div>
+      </div>
+      <div class="input-group">
+        <label>Preferencia de esfuerzo</label>
+        <select id="preferencia_fallo">
+          <option value="siempre_fallo">Siempre al fallo</option>
+          <option value="rir_1_3" selected>Dejo 1-3 repeticiones en reserva</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Equipamiento disponible</h3>
+      <p style="font-size: 0.85rem; color: #aaa;">Marca los ejercicios/equipos que tienes</p>
+      <div id="equipment-groups"></div>
+    </div>
+
+    <button type="submit" class="btn-primary" style="margin-top: 20px;">Generar mi Primera Semana</button>
   `;
 
-  // Llenar equipamiento con nombres como valor
+  // Construir la sección de equipamiento (checkboxes)
   const eqContainer = document.getElementById('equipment-groups');
   for (const [grupo, ejercicios] of Object.entries(grouped)) {
     const div = document.createElement('div');
@@ -127,16 +130,11 @@ export async function renderProfileForm() {
     eqContainer.appendChild(div);
   }
 
-  // Listener del formulario
-  const form = document.getElementById('profile-form-inner');
-  if (form) {
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      await guardarPerfil();
-    });
-  } else {
-    console.error('No se encontró el formulario #profile-form-inner');
-  }
+  // Escuchar el envío del formulario principal (sin anidamiento)
+  formContainer.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await guardarPerfil();
+  });
 }
 
 async function guardarPerfil() {
@@ -167,8 +165,6 @@ async function guardarPerfil() {
     nivel_estres: 3
   };
 
-  console.log('Guardando perfil...');
-
   const { error: perfilError } = await supabase
     .from('profiles')
     .upsert(perfil, { onConflict: 'id' });
@@ -179,16 +175,14 @@ async function guardarPerfil() {
     return;
   }
 
-  // Seleccionar equipamiento por nombre
   const checkboxes = document.querySelectorAll('input[name="equipamiento"]:checked');
   const nombresSeleccionados = Array.from(checkboxes).map(cb => cb.value);
-
   if (nombresSeleccionados.length === 0) {
     alert('Selecciona al menos un ejercicio.');
     return;
   }
 
-  // Buscar los IDs reales en Supabase usando los nombres
+  // Obtener los IDs reales desde la tabla exercises usando los nombres
   let exercisesSupabase = [];
   try {
     const { data, error } = await supabase
@@ -204,11 +198,10 @@ async function guardarPerfil() {
   }
 
   if (exercisesSupabase.length === 0) {
-    alert('No se encontraron los ejercicios en la base de datos. Contacta al soporte.');
+    alert('No se encontraron los ejercicios seleccionados en la base de datos.');
     return;
   }
 
-  // Insertar en user_equipment
   const equipamiento = exercisesSupabase.map(ex => ({
     user_id: user.id,
     exercise_id: ex.id
@@ -223,7 +216,6 @@ async function guardarPerfil() {
     return;
   }
 
-  // Generar primera semana
   try {
     await generateFirstWeek(user.id);
     const { showScreen } = await import('./nav.js');
