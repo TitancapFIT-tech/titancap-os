@@ -1,12 +1,14 @@
 // =====================================================
-// TitanCap.OS - js/profile.js (CORREGIDO)
+// TitanCap.OS - js/profile.js (VERSIÓN FINAL)
+// Carga ejercicios desde catálogo local (config.js)
+// Sin dependencia de la API de Supabase para el formulario
 // =====================================================
 
 import { supabase } from './supabase-client.js';
 import { generateFirstWeek } from './generator.js';
-import { EXERCISES } from './config.js'; // Catálogo offline de respaldo
+import { EXERCISES } from './config.js'; // Catálogo local (57 ejercicios)
 
-// Mapeo de nombres en español a grupo muscular
+// Mapeo de nombres de grupo muscular
 const grupoNames = {
   pecho: 'Pecho',
   espalda: 'Espalda',
@@ -25,42 +27,22 @@ export async function renderProfileForm() {
   const container = document.getElementById('profile-form');
   if (!container) return;
 
-  // 1. Intentar obtener ejercicios desde Supabase
-  let exercises = [];
-  try {
-    const { data, error, status } = await supabase
-      .from('exercises')
-      .select('*')
-      .order('grupo_muscular');
-    if (error) throw error;
-    exercises = data || [];
-    console.log('Ejercicios cargados desde Supabase:', exercises.length);
-  } catch (err) {
-    console.warn('Error al cargar ejercicios desde Supabase, usando catálogo local:', err.message);
-    // 2. Respaldo: catálogo local
-    exercises = EXERCISES.map((ex, index) => ({
-      id: index + 1,
-      nombre: ex.nombre,
-      grupo_muscular: ex.grupo_muscular,
-      tipo: ex.tipo,
-      es_basico: ex.es_basico || false,
-      equipamiento: ex.equipamiento
-    }));
-  }
+  // Cargar ejercicios directamente del catálogo local
+  const exercises = EXERCISES.map((ex, index) => ({
+    id: index + 1,   // IDs coinciden con la tabla Supabase (1-57)
+    ...ex
+  }));
 
-  if (exercises.length === 0) {
-    container.innerHTML = '<p style="color:red;">No se pudieron cargar los ejercicios. Reintenta más tarde.</p>';
-    return;
-  }
+  console.log('Ejercicios cargados desde catálogo local:', exercises.length);
 
-  // 3. Agrupar por grupo muscular
+  // Agrupar por grupo muscular
   const grouped = {};
   exercises.forEach(ex => {
     if (!grouped[ex.grupo_muscular]) grouped[ex.grupo_muscular] = [];
     grouped[ex.grupo_muscular].push(ex);
   });
 
-  // 4. Construir HTML del formulario
+  // Construir HTML del formulario
   container.innerHTML = `
     <h2 style="margin-bottom: 20px;">🔧 Configuración de tu perfil</h2>
     <form id="profile-form-inner">
@@ -176,7 +158,7 @@ export async function renderProfileForm() {
     </form>
   `;
 
-  // 5. Llenar la sección de equipamiento
+  // Llenar la sección de equipamiento con los ejercicios del catálogo local
   const eqContainer = document.getElementById('equipment-groups');
   for (const [grupo, ejercicios] of Object.entries(grouped)) {
     const div = document.createElement('div');
@@ -195,7 +177,7 @@ export async function renderProfileForm() {
     eqContainer.appendChild(div);
   }
 
-  // 6. Manejo del envío del formulario
+  // Manejar el envío del formulario
   document.getElementById('profile-form-inner').addEventListener('submit', async (e) => {
     e.preventDefault();
     await guardarPerfil();
@@ -231,9 +213,8 @@ async function guardarPerfil() {
     nivel_estres: 3
   };
 
-  console.log('Enviando perfil:', perfil);
+  console.log('Guardando perfil...');
 
-  // Guardar perfil en Supabase
   const { error: perfilError } = await supabase
     .from('profiles')
     .upsert(perfil, { onConflict: 'id' });
@@ -256,7 +237,7 @@ async function guardarPerfil() {
     return;
   }
 
-  // Eliminar equipamiento anterior y actualizar
+  // Limpiar equipamiento anterior y guardar el nuevo
   await supabase.from('user_equipment').delete().eq('user_id', user.id);
   const { error: eqError } = await supabase.from('user_equipment').insert(equipamiento);
 
@@ -269,7 +250,6 @@ async function guardarPerfil() {
   // Generar primera semana
   try {
     await generateFirstWeek(user.id);
-    // Redirigir al dashboard
     const { showScreen } = await import('./nav.js');
     showScreen('dashboard-screen');
   } catch (err) {
