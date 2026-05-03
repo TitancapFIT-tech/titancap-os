@@ -1,12 +1,10 @@
 // =====================================================
-// TitanCap.OS - js/config.js
+// TitanCap.OS - js/config.js (completo)
 // Tablas científicas, constantes y catálogo de ejercicios
 // =====================================================
 
 // ------------------------------------------------------
 // VOLUME_TABLE: Volumen semanal por grupo muscular
-// Formato: [MV (mínimo), Ideal, MRV (máximo recuperable)]
-// Niveles: principiante (<1 año), intermedio (1-2 años), avanzado (>2 años)
 // ------------------------------------------------------
 export const VOLUME_TABLE = {
     pecho: {
@@ -67,8 +65,7 @@ export const VOLUME_TABLE = {
 };
 
 // ------------------------------------------------------
-// BASELINE_HYPERTROPHY: Punto de partida de ejercicios básicos
-// (Protocolo Chad Wesley Smith) - Series semanales
+// BASELINE_HYPERTROPHY: básicos (Chad Wesley Smith)
 // ------------------------------------------------------
 export const BASELINE_HYPERTROPHY = {
     sentadilla: 13,
@@ -77,8 +74,7 @@ export const BASELINE_HYPERTROPHY = {
 };
 
 // ------------------------------------------------------
-// STRESS_INDEX_COEFFICIENTS: Cálculo del Índice de Estrés
-// Stress Index = intercept + slope * RIR
+// STRESS_INDEX_COEFFICIENTS
 // ------------------------------------------------------
 export const STRESS_INDEX_COEFFICIENTS = {
     multi_libre:    { intercept: 1.4, slope: -0.2 },
@@ -88,7 +84,7 @@ export const STRESS_INDEX_COEFFICIENTS = {
 };
 
 // ------------------------------------------------------
-// PROGRESSION_SYSTEMS: Sistemas de progresión por nivel
+// PROGRESSION_SYSTEMS
 // ------------------------------------------------------
 export const PROGRESSION_SYSTEMS = {
     principiante: {
@@ -115,7 +111,7 @@ export const PROGRESSION_SYSTEMS = {
 };
 
 // ------------------------------------------------------
-// SPLIT_PATTERNS: Distribución de volumen según días
+// SPLIT_PATTERNS
 // ------------------------------------------------------
 export const SPLIT_PATTERNS = {
     2: {
@@ -146,7 +142,7 @@ export const SPLIT_PATTERNS = {
 };
 
 // ------------------------------------------------------
-// REP_RANGES: Rangos de repeticiones por tipo de ejercicio y objetivo
+// REP_RANGES
 // ------------------------------------------------------
 export const REP_RANGES = {
     basico_fuerza:       { min: 4, max: 8,  rpe: [6,9], rir: [4,1] },
@@ -156,13 +152,13 @@ export const REP_RANGES = {
 };
 
 // ------------------------------------------------------
-// DELOAD_RULES: Reglas para semana de descarga
+// DELOAD_RULES
 // ------------------------------------------------------
 export const DELOAD_RULES = {
-    volumePercent: 0.60,   // 60% del volumen normal
-    intensityPercent: 0.70, // 70% de la intensidad normal
-    durationDays: 7,        // Duración típica
-    maxDurationDays: 10,    // Duración máxima en atletas muy cargados
+    volumePercent: 0.60,
+    intensityPercent: 0.70,
+    durationDays: 7,
+    maxDurationDays: 10,
     triggers: [
         'Rendimiento sostenido a la baja',
         'Dolor articular que aumenta',
@@ -174,7 +170,7 @@ export const DELOAD_RULES = {
 };
 
 // ------------------------------------------------------
-// FATIGA_DECISION_RULES: Lógica de decisión semanal
+// FATIGA_DECISION_RULES
 // ------------------------------------------------------
 export const FATIGA_DECISION_RULES = {
     increase: {
@@ -192,7 +188,7 @@ export const FATIGA_DECISION_RULES = {
 };
 
 // ------------------------------------------------------
-// ADJUSTMENT_FACTORS: Ajustes al baseline de básicos
+// ADJUSTMENT_FACTORS
 // ------------------------------------------------------
 export const ADJUSTMENT_FACTORS = {
     genero: {
@@ -231,7 +227,7 @@ export const ADJUSTMENT_FACTORS = {
 };
 
 // ------------------------------------------------------
-// INTERDEPENDENCIA_FATIGA: Reducciones automáticas
+// INTERDEPENDENCIA_FATIGA
 // ------------------------------------------------------
 export const INTERDEPENDENCIA_FATIGA = {
     pecho: {
@@ -254,7 +250,7 @@ export const INTERDEPENDENCIA_FATIGA = {
 };
 
 // ------------------------------------------------------
-// DEFAULT_EXERCISE_SELECTION: Ejercicios por grupo con prioridades
+// EXERCISE_PRIORITIES
 // ------------------------------------------------------
 export const EXERCISE_PRIORITIES = {
     pecho: ['Press de banca plano con barra', 'Press inclinado con mancuernas', 'Aperturas con mancuernas', 'Cruces en poleas altas', 'Fondos en paralelas para pecho'],
@@ -269,3 +265,77 @@ export const EXERCISE_PRIORITIES = {
     abdomen: ['Crunch abdominal', 'Plancha', 'Rueda abdominal'],
     antebrazo: ['Curl de muñeca en supinación', 'Paseo del granjero', 'Curl invertido con barra']
 };
+
+// ------------------------------------------------------
+// CATÁLOGO COMPLETO DE EJERCICIOS (respaldo offline)
+// ------------------------------------------------------
+export const EXERCISES = [
+    // PECHO
+    { nombre: "Press de banca plano con barra", grupo_muscular: "pecho", tipo: "multi_libre", es_basico: true, equipamiento: "barra" },
+    { nombre: "Press inclinado con mancuernas", grupo_muscular: "pecho", tipo: "multi_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Aperturas con mancuernas", grupo_muscular: "pecho", tipo: "mono_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Cruces en poleas altas", grupo_muscular: "pecho", tipo: "mono_maquina", es_basico: false, equipamiento: "cable" },
+    { nombre: "Fondos en paralelas para pecho", grupo_muscular: "pecho", tipo: "multi_libre", es_basico: false, equipamiento: "peso_corporal" },
+    { nombre: "Press de banca declinado", grupo_muscular: "pecho", tipo: "multi_libre", es_basico: false, equipamiento: "barra" },
+    { nombre: "Peck Deck / Contratector", grupo_muscular: "pecho", tipo: "mono_maquina", es_basico: false, equipamiento: "maquina" },
+    // ESPALDA
+    { nombre: "Dominadas", grupo_muscular: "espalda", tipo: "multi_libre", es_basico: false, equipamiento: "peso_corporal" },
+    { nombre: "Jalón al pecho en polea alta", grupo_muscular: "espalda", tipo: "multi_maquina", es_basico: false, equipamiento: "cable" },
+    { nombre: "Remo con barra", grupo_muscular: "espalda", tipo: "multi_libre", es_basico: false, equipamiento: "barra" },
+    { nombre: "Remo con mancuerna a una mano", grupo_muscular: "espalda", tipo: "multi_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Remo Gironda / Polea baja", grupo_muscular: "espalda", tipo: "multi_maquina", es_basico: false, equipamiento: "cable" },
+    { nombre: "Pull-over con mancuerna o polea", grupo_muscular: "espalda", tipo: "mono_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Remo en punta o Barra T", grupo_muscular: "espalda", tipo: "multi_libre", es_basico: false, equipamiento: "barra" },
+    { nombre: "Peso muerto convencional", grupo_muscular: "espalda", tipo: "multi_libre", es_basico: true, equipamiento: "barra" },
+    // HOMBROS
+    { nombre: "Press militar con barra", grupo_muscular: "deltoides", tipo: "multi_libre", es_basico: false, equipamiento: "barra" },
+    { nombre: "Elevaciones laterales con mancuernas", grupo_muscular: "deltoides", tipo: "mono_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Press Arnold", grupo_muscular: "deltoides", tipo: "multi_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Pájaros / Elevaciones posteriores", grupo_muscular: "deltoides", tipo: "mono_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Face Pulls con cuerda", grupo_muscular: "deltoides", tipo: "mono_maquina", es_basico: false, equipamiento: "cable" },
+    { nombre: "Elevaciones frontales con disco o mancuerna", grupo_muscular: "deltoides", tipo: "mono_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Remo al mentón", grupo_muscular: "deltoides", tipo: "multi_libre", es_basico: false, equipamiento: "barra" },
+    // BÍCEPS
+    { nombre: "Curl de bíceps con barra recta o Z", grupo_muscular: "biceps", tipo: "mono_libre", es_basico: false, equipamiento: "barra" },
+    { nombre: "Curl alterno con mancuernas", grupo_muscular: "biceps", tipo: "mono_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Curl martillo con mancuernas", grupo_muscular: "biceps", tipo: "mono_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Curl predicador en banco Scott", grupo_muscular: "biceps", tipo: "mono_maquina", es_basico: false, equipamiento: "maquina" },
+    { nombre: "Curl concentrado a una mano", grupo_muscular: "biceps", tipo: "mono_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Curl de bíceps en polea baja", grupo_muscular: "biceps", tipo: "mono_maquina", es_basico: false, equipamiento: "cable" },
+    // TRÍCEPS
+    { nombre: "Press francés con barra Z", grupo_muscular: "triceps", tipo: "mono_libre", es_basico: false, equipamiento: "barra" },
+    { nombre: "Extensiones en polea alta con barra o cuerda", grupo_muscular: "triceps", tipo: "mono_maquina", es_basico: false, equipamiento: "cable" },
+    { nombre: "Press de banca con agarre cerrado", grupo_muscular: "triceps", tipo: "multi_libre", es_basico: false, equipamiento: "barra" },
+    { nombre: "Fondos entre bancos o en paralelas", grupo_muscular: "triceps", tipo: "multi_libre", es_basico: false, equipamiento: "peso_corporal" },
+    { nombre: "Extensión tras nuca / Copa", grupo_muscular: "triceps", tipo: "mono_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Patada de tríceps con mancuerna", grupo_muscular: "triceps", tipo: "mono_libre", es_basico: false, equipamiento: "mancuernas" },
+    // ANTEBRAZOS
+    { nombre: "Curl de muñeca en supinación", grupo_muscular: "antebrazo", tipo: "mono_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Curl de muñeca en pronación", grupo_muscular: "antebrazo", tipo: "mono_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Paseo del granjero / Farmer's Walk", grupo_muscular: "antebrazo", tipo: "multi_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Curl invertido con barra", grupo_muscular: "antebrazo", tipo: "mono_libre", es_basico: false, equipamiento: "barra" },
+    // CUÁDRICEPS
+    { nombre: "Sentadilla libre trasera", grupo_muscular: "cuadriceps", tipo: "multi_libre", es_basico: true, equipamiento: "barra" },
+    { nombre: "Prensa de piernas 45°", grupo_muscular: "cuadriceps", tipo: "multi_maquina", es_basico: false, equipamiento: "maquina" },
+    { nombre: "Extensiones de cuádriceps en máquina", grupo_muscular: "cuadriceps", tipo: "mono_maquina", es_basico: false, equipamiento: "maquina" },
+    { nombre: "Sentadilla búlgara", grupo_muscular: "cuadriceps", tipo: "multi_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Zancadas / Lunges", grupo_muscular: "cuadriceps", tipo: "multi_libre", es_basico: false, equipamiento: "mancuernas" },
+    { nombre: "Sentadilla Hack", grupo_muscular: "cuadriceps", tipo: "multi_maquina", es_basico: false, equipamiento: "maquina" },
+    // ISQUIOTIBIALES
+    { nombre: "Peso muerto rumano", grupo_muscular: "isquios", tipo: "multi_libre", es_basico: false, equipamiento: "barra" },
+    { nombre: "Curl femoral tumbado", grupo_muscular: "isquios", tipo: "mono_maquina", es_basico: false, equipamiento: "maquina" },
+    { nombre: "Curl femoral sentado", grupo_muscular: "isquios", tipo: "mono_maquina", es_basico: false, equipamiento: "maquina" },
+    { nombre: "Peso muerto piernas rígidas", grupo_muscular: "isquios", tipo: "multi_libre", es_basico: false, equipamiento: "barra" },
+    { nombre: "Buenos días con barra", grupo_muscular: "isquios", tipo: "multi_libre", es_basico: false, equipamiento: "barra" },
+    // GEMELOS
+    { nombre: "Elevación de talones de pie en máquina", grupo_muscular: "pantorrilla", tipo: "mono_maquina", es_basico: false, equipamiento: "maquina" },
+    { nombre: "Elevación de talones sentado", grupo_muscular: "pantorrilla", tipo: "mono_maquina", es_basico: false, equipamiento: "maquina" },
+    { nombre: "Elevación de talones en prensa", grupo_muscular: "pantorrilla", tipo: "mono_maquina", es_basico: false, equipamiento: "maquina" },
+    // ABDOMEN
+    { nombre: "Crunch abdominal", grupo_muscular: "abdomen", tipo: "mono_libre", es_basico: false, equipamiento: "peso_corporal" },
+    { nombre: "Rueda abdominal", grupo_muscular: "abdomen", tipo: "mono_libre", es_basico: false, equipamiento: "peso_corporal" },
+    { nombre: "Crunch abdominal polea", grupo_muscular: "abdomen", tipo: "mono_maquina", es_basico: false, equipamiento: "cable" },
+    { nombre: "Plancha", grupo_muscular: "abdomen", tipo: "mono_libre", es_basico: false, equipamiento: "peso_corporal" },
+    // GLÚTEOS
+    { nombre: "Puente de glúteos", grupo_muscular: "gluteos", tipo: "mono_libre", es_basico: false, equipamiento: "barra" }
+];
