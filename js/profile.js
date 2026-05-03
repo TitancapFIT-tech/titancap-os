@@ -1,32 +1,69 @@
 // =====================================================
-// TitanCap.OS - js/profile.js
-// Formulario de creación de perfil del atleta
+// TitanCap.OS - js/profile.js (CORREGIDO)
 // =====================================================
 
 import { supabase } from './supabase-client.js';
 import { generateFirstWeek } from './generator.js';
+import { EXERCISES } from './config.js'; // Catálogo offline de respaldo
 
-// Renderizar el formulario de perfil
+// Mapeo de nombres en español a grupo muscular
+const grupoNames = {
+  pecho: 'Pecho',
+  espalda: 'Espalda',
+  deltoides: 'Hombros',
+  biceps: 'Bíceps',
+  triceps: 'Tríceps',
+  antebrazo: 'Antebrazos',
+  cuadriceps: 'Cuádriceps',
+  isquios: 'Isquiotibiales',
+  gluteos: 'Glúteos',
+  pantorrilla: 'Gemelos',
+  abdomen: 'Abdomen'
+};
+
 export async function renderProfileForm() {
   const container = document.getElementById('profile-form');
-  
-  // Obtener catálogo de ejercicios para selección de equipamiento
-  const { data: exercises } = await supabase
-    .from('exercises')
-    .select('*')
-    .order('grupo_muscular');
+  if (!container) return;
 
-  // Agrupar por grupo muscular
+  // 1. Intentar obtener ejercicios desde Supabase
+  let exercises = [];
+  try {
+    const { data, error, status } = await supabase
+      .from('exercises')
+      .select('*')
+      .order('grupo_muscular');
+    if (error) throw error;
+    exercises = data || [];
+    console.log('Ejercicios cargados desde Supabase:', exercises.length);
+  } catch (err) {
+    console.warn('Error al cargar ejercicios desde Supabase, usando catálogo local:', err.message);
+    // 2. Respaldo: catálogo local
+    exercises = EXERCISES.map((ex, index) => ({
+      id: index + 1,
+      nombre: ex.nombre,
+      grupo_muscular: ex.grupo_muscular,
+      tipo: ex.tipo,
+      es_basico: ex.es_basico || false,
+      equipamiento: ex.equipamiento
+    }));
+  }
+
+  if (exercises.length === 0) {
+    container.innerHTML = '<p style="color:red;">No se pudieron cargar los ejercicios. Reintenta más tarde.</p>';
+    return;
+  }
+
+  // 3. Agrupar por grupo muscular
   const grouped = {};
   exercises.forEach(ex => {
     if (!grouped[ex.grupo_muscular]) grouped[ex.grupo_muscular] = [];
     grouped[ex.grupo_muscular].push(ex);
   });
 
+  // 4. Construir HTML del formulario
   container.innerHTML = `
     <h2 style="margin-bottom: 20px;">🔧 Configuración de tu perfil</h2>
     <form id="profile-form-inner">
-      <!-- DATOS BÁSICOS -->
       <div class="section">
         <h3>Datos básicos</h3>
         <div class="input-group">
@@ -56,7 +93,6 @@ export async function renderProfileForm() {
         </div>
       </div>
 
-      <!-- EXPERIENCIA Y DIETA -->
       <div class="section">
         <h3>Experiencia y nutrición</h3>
         <div class="input-group">
@@ -83,7 +119,6 @@ export async function renderProfileForm() {
         </div>
       </div>
 
-      <!-- MARCAS DE FUERZA -->
       <div class="section">
         <h3>1RM en ejercicios básicos (kg)</h3>
         <div class="input-row">
@@ -102,7 +137,6 @@ export async function renderProfileForm() {
         </div>
       </div>
 
-      <!-- OBJETIVO Y DISPONIBILIDAD -->
       <div class="section">
         <h3>Objetivo y disponibilidad</h3>
         <div class="input-group">
@@ -110,7 +144,7 @@ export async function renderProfileForm() {
           <select id="objetivo">
             <option value="hipertrofia">Ganar masa muscular</option>
             <option value="fuerza">Fuerza máxima en básicos</option>
-            <option value="mixto">Mixto (fuerza + hipertrofia)</option>
+            <option value="mixto" selected>Mixto (fuerza + hipertrofia)</option>
           </select>
         </div>
         <div class="input-row">
@@ -132,10 +166,9 @@ export async function renderProfileForm() {
         </div>
       </div>
 
-      <!-- EQUIPAMIENTO DISPONIBLE -->
       <div class="section">
         <h3>Equipamiento disponible</h3>
-        <p style="font-size: 0.85rem; color: #aaa;">Marca los ejercicios/equipos que tienes</p>
+        <p style="font-size: 0.85rem; color: #aaa;">Marca los ejercicios/equipos que tienes (selecciona al menos uno por grupo)</p>
         <div id="equipment-groups"></div>
       </div>
 
@@ -143,22 +176,8 @@ export async function renderProfileForm() {
     </form>
   `;
 
-  // Renderizar grupos de equipamiento
+  // 5. Llenar la sección de equipamiento
   const eqContainer = document.getElementById('equipment-groups');
-  const grupoNames = {
-    pecho: 'Pecho',
-    espalda: 'Espalda',
-    deltoides: 'Hombros',
-    biceps: 'Bíceps',
-    triceps: 'Tríceps',
-    antebrazo: 'Antebrazos',
-    cuadriceps: 'Cuádriceps',
-    isquios: 'Isquiotibiales',
-    gluteos: 'Glúteos',
-    pantorrilla: 'Gemelos',
-    abdomen: 'Abdomen'
-  };
-  
   for (const [grupo, ejercicios] of Object.entries(grouped)) {
     const div = document.createElement('div');
     div.className = 'equipment-group';
@@ -176,7 +195,7 @@ export async function renderProfileForm() {
     eqContainer.appendChild(div);
   }
 
-  // Enviar formulario
+  // 6. Manejo del envío del formulario
   document.getElementById('profile-form-inner').addEventListener('submit', async (e) => {
     e.preventDefault();
     await guardarPerfil();
@@ -185,36 +204,45 @@ export async function renderProfileForm() {
 
 async function guardarPerfil() {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return alert('No estás autenticado');
+  if (!user) {
+    alert('Sesión no encontrada. Por favor, vuelve a iniciar sesión.');
+    return;
+  }
 
   // Recoger datos del formulario
   const perfil = {
     id: user.id,
     email: user.email,
-    nombre: document.getElementById('nombre').value,
-    edad: parseInt(document.getElementById('edad').value),
-    peso_kg: parseFloat(document.getElementById('peso').value),
-    estatura_cm: parseInt(document.getElementById('estatura').value),
+    nombre: document.getElementById('nombre').value.trim(),
+    edad: parseInt(document.getElementById('edad').value) || 20,
+    peso_kg: parseFloat(document.getElementById('peso').value) || 70,
+    estatura_cm: parseInt(document.getElementById('estatura').value) || 170,
     genero: document.getElementById('genero').value,
-    experiencia_entrenamiento_meses: parseInt(document.getElementById('experiencia').value),
+    experiencia_entrenamiento_meses: parseInt(document.getElementById('experiencia').value) || 12,
     dieta: document.getElementById('dieta').value,
-    horas_sueno_promedio: parseFloat(document.getElementById('horas_sueno').value),
+    horas_sueno_promedio: parseFloat(document.getElementById('horas_sueno').value) || 7,
     rm_sentadilla: parseFloat(document.getElementById('rm_sentadilla').value) || 0,
     rm_banca: parseFloat(document.getElementById('rm_banca').value) || 0,
     rm_peso_muerto: parseFloat(document.getElementById('rm_peso_muerto').value) || 0,
     objetivo: document.getElementById('objetivo').value,
-    dias_disponibles: parseInt(document.getElementById('dias_disponibles').value),
-    tiempo_por_sesion_min: parseInt(document.getElementById('tiempo_sesion').value),
+    dias_disponibles: parseInt(document.getElementById('dias_disponibles').value) || 4,
+    tiempo_por_sesion_min: parseInt(document.getElementById('tiempo_sesion').value) || 60,
     preferencia_fallo: document.getElementById('preferencia_fallo').value,
     nivel_estres: 3
   };
 
-  // Insertar perfil
+  console.log('Enviando perfil:', perfil);
+
+  // Guardar perfil en Supabase
   const { error: perfilError } = await supabase
     .from('profiles')
     .upsert(perfil, { onConflict: 'id' });
 
-  if (perfilError) return alert('Error guardando perfil: ' + perfilError.message);
+  if (perfilError) {
+    console.error('Error al guardar perfil:', perfilError);
+    alert('Error al guardar el perfil: ' + perfilError.message);
+    return;
+  }
 
   // Guardar equipamiento seleccionado
   const checkboxes = document.querySelectorAll('input[name="equipamiento"]:checked');
@@ -223,17 +251,29 @@ async function guardarPerfil() {
     exercise_id: parseInt(cb.value)
   }));
 
-  // Limpiar equipamiento anterior
-  await supabase.from('user_equipment').delete().eq('user_id', user.id);
-  if (equipamiento.length > 0) {
-    await supabase.from('user_equipment').insert(equipamiento);
+  if (equipamiento.length === 0) {
+    alert('Debes seleccionar al menos un ejercicio en el equipamiento.');
+    return;
   }
 
-  // Generar primera semana automáticamente
+  // Eliminar equipamiento anterior y actualizar
+  await supabase.from('user_equipment').delete().eq('user_id', user.id);
+  const { error: eqError } = await supabase.from('user_equipment').insert(equipamiento);
+
+  if (eqError) {
+    console.error('Error al guardar equipamiento:', eqError);
+    alert('Error al guardar el equipamiento: ' + eqError.message);
+    return;
+  }
+
+  // Generar primera semana
   try {
     await generateFirstWeek(user.id);
+    // Redirigir al dashboard
+    const { showScreen } = await import('./nav.js');
     showScreen('dashboard-screen');
   } catch (err) {
-    alert('Error generando rutina: ' + err.message);
+    console.error('Error al generar rutina:', err);
+    alert('Error al generar la primera semana: ' + err.message);
   }
 }
