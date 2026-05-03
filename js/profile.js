@@ -1,80 +1,49 @@
 // =====================================================
-// TitanCap.OS - js/profile.js (VERSIÓN FINAL)
-// Carga ejercicios desde catálogo local (config.js)
-// Sin dependencia de la API de Supabase para el formulario
+// TitanCap.OS - js/profile.js (VERSIÓN FINAL - ROBUSTA)
 // =====================================================
 
 import { supabase } from './supabase-client.js';
 import { generateFirstWeek } from './generator.js';
-import { EXERCISES } from './config.js'; // Catálogo local (57 ejercicios)
+import { EXERCISES } from './config.js'; // Catálogo local con nombres
 
-// Mapeo de nombres de grupo muscular
 const grupoNames = {
-  pecho: 'Pecho',
-  espalda: 'Espalda',
-  deltoides: 'Hombros',
-  biceps: 'Bíceps',
-  triceps: 'Tríceps',
-  antebrazo: 'Antebrazos',
-  cuadriceps: 'Cuádriceps',
-  isquios: 'Isquiotibiales',
-  gluteos: 'Glúteos',
-  pantorrilla: 'Gemelos',
-  abdomen: 'Abdomen'
+  pecho: 'Pecho', espalda: 'Espalda', deltoides: 'Hombros',
+  biceps: 'Bíceps', triceps: 'Tríceps', antebrazo: 'Antebrazos',
+  cuadriceps: 'Cuádriceps', isquios: 'Isquiotibiales', gluteos: 'Glúteos',
+  pantorrilla: 'Gemelos', abdomen: 'Abdomen'
 };
 
 export async function renderProfileForm() {
   const container = document.getElementById('profile-form');
   if (!container) return;
 
-  // Cargar ejercicios directamente del catálogo local
-  const exercises = EXERCISES.map((ex, index) => ({
-    id: index + 1,   // IDs coinciden con la tabla Supabase (1-57)
-    ...ex
-  }));
+  // Usamos el catálogo local para la UI
+  const exercises = EXERCISES.map((ex, idx) => ({ ...ex, localId: idx + 1 }));
 
   console.log('Ejercicios cargados desde catálogo local:', exercises.length);
 
-  // Agrupar por grupo muscular
   const grouped = {};
   exercises.forEach(ex => {
     if (!grouped[ex.grupo_muscular]) grouped[ex.grupo_muscular] = [];
     grouped[ex.grupo_muscular].push(ex);
   });
 
-  // Construir HTML del formulario
   container.innerHTML = `
     <h2 style="margin-bottom: 20px;">🔧 Configuración de tu perfil</h2>
     <form id="profile-form-inner">
       <div class="section">
         <h3>Datos básicos</h3>
-        <div class="input-group">
-          <label>Nombre</label>
-          <input type="text" id="nombre" required>
-        </div>
+        <div class="input-group"><label>Nombre</label><input type="text" id="nombre" required></div>
         <div class="input-row">
-          <div class="input-group">
-            <label>Edad</label>
-            <input type="number" id="edad" min="14" max="80" required>
-          </div>
-          <div class="input-group">
-            <label>Peso (kg)</label>
-            <input type="number" id="peso" step="0.1" required>
-          </div>
-          <div class="input-group">
-            <label>Estatura (cm)</label>
-            <input type="number" id="estatura" required>
-          </div>
+          <div class="input-group"><label>Edad</label><input type="number" id="edad" min="14" max="80" required></div>
+          <div class="input-group"><label>Peso (kg)</label><input type="number" id="peso" step="0.1" required></div>
+          <div class="input-group"><label>Estatura (cm)</label><input type="number" id="estatura" required></div>
         </div>
         <div class="input-group">
           <label>Género</label>
-          <select id="genero">
-            <option value="masculino">Masculino</option>
-            <option value="femenino">Femenino</option>
-          </select>
+          <select id="genero"><option value="masculino">Masculino</option><option value="femenino">Femenino</option></select>
         </div>
       </div>
-
       <div class="section">
         <h3>Experiencia y nutrición</h3>
         <div class="input-group">
@@ -90,9 +59,9 @@ export async function renderProfileForm() {
         <div class="input-group">
           <label>Dieta actual</label>
           <select id="dieta">
-            <option value="deficit">Déficit calórico (pérdida de grasa)</option>
+            <option value="deficit">Déficit calórico</option>
             <option value="mantenimiento" selected>Mantenimiento</option>
-            <option value="superavit">Superávit calórico (ganancia muscular)</option>
+            <option value="superavit">Superávit calórico</option>
           </select>
         </div>
         <div class="input-group">
@@ -100,25 +69,14 @@ export async function renderProfileForm() {
           <input type="number" id="horas_sueno" min="4" max="12" step="0.5" value="7">
         </div>
       </div>
-
       <div class="section">
         <h3>1RM en ejercicios básicos (kg)</h3>
         <div class="input-row">
-          <div class="input-group">
-            <label>Sentadilla</label>
-            <input type="number" id="rm_sentadilla" step="0.5" placeholder="0 si no sabes">
-          </div>
-          <div class="input-group">
-            <label>Press Banca</label>
-            <input type="number" id="rm_banca" step="0.5" placeholder="0 si no sabes">
-          </div>
-          <div class="input-group">
-            <label>Peso Muerto</label>
-            <input type="number" id="rm_peso_muerto" step="0.5" placeholder="0 si no sabes">
-          </div>
+          <div class="input-group"><label>Sentadilla</label><input type="number" id="rm_sentadilla" step="0.5" placeholder="0"></div>
+          <div class="input-group"><label>Press Banca</label><input type="number" id="rm_banca" step="0.5" placeholder="0"></div>
+          <div class="input-group"><label>Peso Muerto</label><input type="number" id="rm_peso_muerto" step="0.5" placeholder="0"></div>
         </div>
       </div>
-
       <div class="section">
         <h3>Objetivo y disponibilidad</h3>
         <div class="input-group">
@@ -130,35 +88,27 @@ export async function renderProfileForm() {
           </select>
         </div>
         <div class="input-row">
-          <div class="input-group">
-            <label>Días/semana</label>
-            <input type="number" id="dias_disponibles" min="2" max="6" value="4">
-          </div>
-          <div class="input-group">
-            <label>Minutos/sesión</label>
-            <input type="number" id="tiempo_sesion" min="30" max="120" value="60">
-          </div>
+          <div class="input-group"><label>Días/semana</label><input type="number" id="dias_disponibles" min="2" max="6" value="4"></div>
+          <div class="input-group"><label>Minutos/sesión</label><input type="number" id="tiempo_sesion" min="30" max="120" value="60"></div>
         </div>
         <div class="input-group">
           <label>Preferencia de esfuerzo</label>
           <select id="preferencia_fallo">
             <option value="siempre_fallo">Siempre al fallo</option>
-            <option value="rir_1_3" selected>Dejo 1-3 repeticiones en reserva (RIR)</option>
+            <option value="rir_1_3" selected>Dejo 1-3 repeticiones en reserva</option>
           </select>
         </div>
       </div>
-
       <div class="section">
         <h3>Equipamiento disponible</h3>
-        <p style="font-size: 0.85rem; color: #aaa;">Marca los ejercicios/equipos que tienes (selecciona al menos uno por grupo)</p>
+        <p style="font-size: 0.85rem; color: #aaa;">Marca los ejercicios/equipos que tienes</p>
         <div id="equipment-groups"></div>
       </div>
-
       <button type="submit" class="btn-primary" style="margin-top: 20px;">Generar mi Primera Semana</button>
     </form>
   `;
 
-  // Llenar la sección de equipamiento con los ejercicios del catálogo local
+  // Llenar equipamiento con nombres como valor
   const eqContainer = document.getElementById('equipment-groups');
   for (const [grupo, ejercicios] of Object.entries(grouped)) {
     const div = document.createElement('div');
@@ -168,7 +118,7 @@ export async function renderProfileForm() {
       <div class="checkbox-grid">
         ${ejercicios.map(ex => `
           <label class="checkbox-item">
-            <input type="checkbox" name="equipamiento" value="${ex.id}" ${ex.es_basico ? 'checked' : ''}>
+            <input type="checkbox" name="equipamiento" value="${ex.nombre}" ${ex.es_basico ? 'checked' : ''}>
             <span>${ex.nombre} <small>(${ex.equipamiento})</small></span>
           </label>
         `).join('')}
@@ -177,21 +127,25 @@ export async function renderProfileForm() {
     eqContainer.appendChild(div);
   }
 
-  // Manejar el envío del formulario
-  document.getElementById('profile-form-inner').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await guardarPerfil();
-  });
+  // Listener del formulario
+  const form = document.getElementById('profile-form-inner');
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await guardarPerfil();
+    });
+  } else {
+    console.error('No se encontró el formulario #profile-form-inner');
+  }
 }
 
 async function guardarPerfil() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    alert('Sesión no encontrada. Por favor, vuelve a iniciar sesión.');
+    alert('Sesión no encontrada. Vuelve a iniciar sesión.');
     return;
   }
 
-  // Recoger datos del formulario
   const perfil = {
     id: user.id,
     email: user.email,
@@ -221,23 +175,45 @@ async function guardarPerfil() {
 
   if (perfilError) {
     console.error('Error al guardar perfil:', perfilError);
-    alert('Error al guardar el perfil: ' + perfilError.message);
+    alert('Error al guardar perfil: ' + perfilError.message);
     return;
   }
 
-  // Guardar equipamiento seleccionado
+  // Seleccionar equipamiento por nombre
   const checkboxes = document.querySelectorAll('input[name="equipamiento"]:checked');
-  const equipamiento = Array.from(checkboxes).map(cb => ({
+  const nombresSeleccionados = Array.from(checkboxes).map(cb => cb.value);
+
+  if (nombresSeleccionados.length === 0) {
+    alert('Selecciona al menos un ejercicio.');
+    return;
+  }
+
+  // Buscar los IDs reales en Supabase usando los nombres
+  let exercisesSupabase = [];
+  try {
+    const { data, error } = await supabase
+      .from('exercises')
+      .select('id, nombre')
+      .in('nombre', nombresSeleccionados);
+    if (error) throw error;
+    exercisesSupabase = data || [];
+  } catch (err) {
+    console.error('Error obteniendo ejercicios de Supabase:', err);
+    alert('Error al sincronizar el equipamiento. Intenta de nuevo.');
+    return;
+  }
+
+  if (exercisesSupabase.length === 0) {
+    alert('No se encontraron los ejercicios en la base de datos. Contacta al soporte.');
+    return;
+  }
+
+  // Insertar en user_equipment
+  const equipamiento = exercisesSupabase.map(ex => ({
     user_id: user.id,
-    exercise_id: parseInt(cb.value)
+    exercise_id: ex.id
   }));
 
-  if (equipamiento.length === 0) {
-    alert('Debes seleccionar al menos un ejercicio en el equipamiento.');
-    return;
-  }
-
-  // Limpiar equipamiento anterior y guardar el nuevo
   await supabase.from('user_equipment').delete().eq('user_id', user.id);
   const { error: eqError } = await supabase.from('user_equipment').insert(equipamiento);
 
