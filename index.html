@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0a0a">
+    <meta name="description" content="TitanCap.OS - Entrenamiento inteligente personalizado">
+    <title>TitanCap.OS</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <!-- Precarga de fuente Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Pantalla de carga -->
+        <div id="loading-screen" class="screen active">
+            <div class="logo-animation">
+                <h1 class="titan-logo">TITANCAP<span>.</span>OS</h1>
+                <div class="loader-bar"></div>
+            </div>
+        </div>
+
+        <!-- Autenticación -->
+        <div id="auth-screen" class="screen">
+            <div id="auth-container"></div>
+        </div>
+
+        <!-- Perfil inicial -->
+        <div id="profile-screen" class="screen">
+            <form id="profile-form"></form>
+        </div>
+
+        <!-- Dashboard principal -->
+        <div id="dashboard-screen" class="screen">
+            <header class="top-bar">
+                <div>
+                    <h2 id="saludo-personalizado"></h2>
+                    <p id="frase-motivacional" style="font-size:0.8rem;color:#aaa;margin-top:4px;"></p>
+                </div>
+                <button id="btn-logout" class="btn-back" style="font-size:0.9rem;">Salir</button>
+            </header>
+            <div id="week-days-container" class="days-grid"></div>
+            <div class="action-buttons">
+                <button id="btn-completar-semana" class="btn-icon">✅ Semana Completada</button>
+                <button id="btn-reiniciar" class="btn-icon outline">🔄 Reiniciar Todo</button>
+            </div>
+        </div>
+
+        <!-- Día de entrenamiento -->
+        <div id="workout-screen" class="screen">
+            <header class="top-bar">
+                <button id="btn-back" class="btn-back">&larr; Volver</button>
+                <h2 id="dia-titulo"></h2>
+                <div></div> <!-- spacer -->
+            </header>
+            <div id="ejercicios-container" class="exercises-list"></div>
+            <button id="btn-finalizar-dia" class="btn-primary">Día Completado</button>
+        </div>
+
+        <!-- Modal Encuesta -->
+        <div id="survey-modal" class="modal">
+            <div class="modal-content">
+                <form id="survey-form"></form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script principal (módulo ES) -->
+    <script type="module">
+        import { initApp } from './js/nav.js';
+        // Iniciar la aplicación cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', () => {
+            initApp();
+        });
+    </script>
+</body>
+</html>
