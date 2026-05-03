@@ -1,33 +1,35 @@
 // =====================================================
-// TitanCap.OS - js/auth.js
-// Gestión de autenticación (registro, inicio de sesión, cierre de sesión)
+// TitanCap.OS - js/auth.js (CORREGIDO - sin showScreen)
 // =====================================================
 
 import { supabase } from './supabase-client.js';
 
-// Escucha cambios de estado de autenticación
-supabase.auth.onAuthStateChange((event, session) => {
-  if (event === 'SIGNED_IN') {
-    console.log('Usuario autenticado:', session.user.email);
-    // Redirigir a la pantalla correspondiente
-    checkProfileAndRoute(session.user.id);
-  }
-  if (event === 'SIGNED_OUT') {
-    showScreen('auth-screen');
-  }
-});
-
-// Verificar si hay sesión activa al cargar
+/**
+ * Verifica si hay una sesión activa en Supabase Auth.
+ * Devuelve un objeto con el usuario y si tiene perfil, o null si no hay sesión.
+ */
 export async function checkSession() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user) {
-    await checkProfileAndRoute(session.user.id);
-  } else {
-    showScreen('auth-screen');
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error) {
+    console.error('Error al obtener sesión:', error);
+    return null;
   }
+  if (session?.user) {
+    console.log('Sesión encontrada para:', session.user.email);
+    // Verificar si el usuario ya completó su perfil
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', session.user.id)
+      .single();
+    return { user: session.user, hasProfile: !!profile };
+  }
+  return null;
 }
 
-// Renderizar formulario de login/registro
+/**
+ * Renderiza el formulario de inicio de sesión / registro.
+ */
 export function renderAuthForm() {
   const container = document.getElementById('auth-container');
   container.innerHTML = `
@@ -56,58 +58,50 @@ export function renderAuthForm() {
     </div>
   `;
 
-  // Listeners para tabs
   let currentTab = 'login';
   document.querySelectorAll('.auth-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       currentTab = tab.dataset.tab;
-      const btn = document.getElementById('auth-submit-btn');
-      btn.textContent = currentTab === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta';
+      document.getElementById('auth-submit-btn').textContent =
+        currentTab === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta';
     });
   });
 
-  // Submit del formulario
   document.getElementById('auth-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = document.getElementById('auth-email').value.trim();
     const password = document.getElementById('auth-password').value;
     const errorEl = document.getElementById('auth-error');
+    errorEl.textContent = '';
 
     if (currentTab === 'login') {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         errorEl.textContent = error.message;
+        return;
       }
+      // Login exitoso: recargamos la página para que initApp redirija correctamente
+      window.location.reload();
     } else {
+      // Registro
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) {
         errorEl.textContent = error.message;
-      } else {
-        errorEl.textContent = 'Cuenta creada. Revisa tu email para confirmar (si está habilitado).';
-        // En Supabase puedes desactivar la confirmación de email en Settings > Auth
+        return;
       }
+      // Éxito en registro: puede que necesite confirmación de email, informamos
+      errorEl.textContent = 'Cuenta creada. Ya puedes iniciar sesión.';
+      // Cambiamos a la pestaña de login
+      document.querySelector('.auth-tab[data-tab="login"]').click();
     }
   });
 }
 
-// Comprobar si el usuario ya tiene perfil, y redirigir
-async function checkProfileAndRoute(userId) {
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('id', userId)
-    .single();
-
-  if (profile) {
-    showScreen('dashboard-screen');
-  } else {
-    showScreen('profile-screen');
-  }
-}
-
-// Cerrar sesión
+/**
+ * Cierra la sesión actual.
+ */
 export async function signOut() {
   await supabase.auth.signOut();
 }
