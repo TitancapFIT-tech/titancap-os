@@ -1,5 +1,5 @@
 // =====================================================
-// TitanCap.OS - js/profile.js (FORMULARIO CORREGIDO)
+// TitanCap.OS - js/profile.js (VERSIÓN FINAL – CON UPSERT)
 // =====================================================
 
 import { supabase } from './supabase-client.js';
@@ -202,13 +202,16 @@ async function guardarPerfil() {
     return;
   }
 
+  // Mapear a formato para upsert: (user_id, exercise_id)
   const equipamiento = exercisesSupabase.map(ex => ({
     user_id: user.id,
     exercise_id: ex.id
   }));
 
-  await supabase.from('user_equipment').delete().eq('user_id', user.id);
-  const { error: eqError } = await supabase.from('user_equipment').insert(equipamiento);
+  // Usar upsert en lugar de delete+insert para evitar "duplicate key"
+  const { error: eqError } = await supabase
+    .from('user_equipment')
+    .upsert(equipamiento, { onConflict: 'user_id, exercise_id' });
 
   if (eqError) {
     console.error('Error al guardar equipamiento:', eqError);
