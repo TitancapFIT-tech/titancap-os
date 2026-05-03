@@ -1,7 +1,5 @@
 // =====================================================
-// TitanCap.OS - js/generator.js
-// Motor de periodización completo: primera semana, 
-// semanas siguientes, descargas y progresiones
+// TitanCap.OS - js/generator.js (v2 - upsert en semana)
 // =====================================================
 
 import { supabase } from './supabase-client.js';
@@ -13,8 +11,7 @@ import {
   ADJUSTMENT_FACTORS,
   INTERDEPENDENCIA_FATIGA,
   EXERCISE_PRIORITIES,
-  DELOAD_RULES,
-  PROGRESSION_SYSTEMS
+  DELOAD_RULES
 } from './config.js';
 
 // -----------------------------------------------
@@ -105,17 +102,24 @@ export async function generateFirstWeek(userId) {
     volumenObjetivo['isquios'] = Math.round(volumenObjetivo['isquios'] * 0.7);
   }
 
-  // Insertar week_program
+  // UPSERT en weekly_programs (por si ya existía una semana 1)
   const today = new Date();
   const { data: weekProgram, error: weekError } = await supabase
-    .from('weekly_programs').insert({
+    .from('weekly_programs')
+    .upsert({
       user_id: userId,
       week_number: 1,
       fecha_inicio: today.toISOString().split('T')[0],
       type: 'normal',
       split_type: splitType
-    }).select().single();
+    }, { onConflict: 'user_id, week_number' })
+    .select()
+    .single();
+
   if (weekError) throw weekError;
+
+  // Eliminar días anteriores de esta semana (si los había)
+  await supabase.from('workout_days').delete().eq('weekly_program_id', weekProgram.id);
 
   await construirDias(weekProgram, perfil, availableExercises, volumenObjetivo, objetivo, null);
   return weekProgram;
@@ -125,7 +129,6 @@ export async function generateFirstWeek(userId) {
 // 5. GENERAR SIGUIENTE SEMANA (NORMAL O DESCARGA)
 // -----------------------------------------------
 export async function generateNextWeek(userId, decision) {
-  // Obtener perfil y última semana
   const { data: perfil } = await supabase.from('profiles').select('*').eq('id', userId).single();
   const { data: lastWeek } = await supabase
     .from('weekly_programs').select('*').eq('user_id', userId)
@@ -136,40 +139,34 @@ export async function generateNextWeek(userId, decision) {
   const objetivo = perfil.objetivo;
   const dias = perfil.dias_disponibles;
 
-  // Obtener equipamiento
   const { data: equipment } = await supabase
     .from('user_equipment').select('exercise_id, exercises(*)').eq('user_id', userId);
   const availableExercises = equipment.map(e => e.exercises);
 
-  // Obtener volúmenes previos y rendimiento
   const prevVolumeData = await calcularVolumenesPrevios(userId, lastWeek.id);
 
-  // Calcular volúmenes para esta semana según decisión
   let factorVol = 1.0;
   let factorInt = 1.0;
   let weekType = 'normal';
 
   if (decision === 'deload') {
-    factorVol = DELOAD_RULES.volumePercent;   // 0.60
-    factorInt = DELOAD_RULES.intensityPercent; // 0.70
+    factorVol = DELOAD_RULES.volumePercent;
+    factorInt = DELOAD_RULES.intensityPercent;
     weekType = 'descarga';
   }
 
   const volumenObjetivo = {};
   const grupos = ['pecho','espalda','deltoides','cuadriceps','isquios','gluteos','biceps','triceps','pantorrilla','abdomen','antebrazo'];
   grupos.forEach(g => {
-    // Partir del volumen objetivo normal y luego aplicar factor y ajustes de progresión
     let vol = calcularVolumenGrupo(g, nivel, perfil);
     vol = Math.round(vol * factorVol);
     if (decision === 'normal' && prevVolumeData[g]) {
-      // Si la semana anterior fue normal, aplicar progresión
-      const feedback = prevVolumeData._feedback; // pasaremos feedback escondido
+      const feedback = prevVolumeData._feedback;
       vol = aplicarProgresion(vol, g, perfil, prevVolumeData, feedback);
     }
     volumenObjetivo[g] = vol;
   });
 
-  // Básicos
   const basicosVol = {
     sentadilla: Math.round(calcularVolumenBasico('sentadilla', perfil) * factorVol),
     press_banca: Math.round(calcularVolumenBasico('press_banca', perfil) * factorVol),
@@ -179,7 +176,6 @@ export async function generateNextWeek(userId, decision) {
   volumenObjetivo['pecho'] = Math.max(volumenObjetivo['pecho'], basicosVol.press_banca);
   volumenObjetivo['espalda'] = Math.max(volumenObjetivo['espalda'], basicosVol.peso_muerto);
 
-  // Interdependencia de fatiga (se aplica incluso en descarga, pero con factor)
   if (volumenObjetivo['pecho'] > 10) {
     volumenObjetivo['triceps'] = Math.round(volumenObjetivo['triceps'] * 0.7);
     volumenObjetivo['deltoides'] = Math.round(volumenObjetivo['deltoides'] * 0.8);
@@ -188,43 +184,44 @@ export async function generateNextWeek(userId, decision) {
     volumenObjetivo['isquios'] = Math.round(volumenObjetivo['isquios'] * 0.7);
   }
 
-  // Insertar semana
   const splitConfig = SPLIT_PATTERNS[dias] || SPLIT_PATTERNS[4];
   const fecha = new Date();
-  fecha.setDate(fecha.getDate() + 1); // empezar mañana
+  fecha.setDate(fecha.getDate() + 1);
+
   const { data: newWeek, error: weekErr } = await supabase
-    .from('weekly_programs').insert({
+    .from('weekly_programs')
+    .upsert({
       user_id: userId,
       week_number: newWeekNumber,
       fecha_inicio: fecha.toISOString().split('T')[0],
       type: weekType,
       split_type: splitConfig.type
-    }).select().single();
+    }, { onConflict: 'user_id, week_number' })
+    .select()
+    .single();
+
   if (weekErr) throw weekErr;
 
-  // Construir días con intensidad ajustada
+  // Limpiar días viejos
+  await supabase.from('workout_days').delete().eq('weekly_program_id', newWeek.id);
+
   await construirDias(newWeek, perfil, availableExercises, volumenObjetivo, objetivo, { factorInt });
   return newWeek;
 }
 
 // -----------------------------------------------
-// 6. APLICAR PROGRESIÓN AL VOLUMEN SEGÚN SISTEMA
+// 6. APLICAR PROGRESIÓN
 // -----------------------------------------------
 function aplicarProgresion(volBase, grupo, perfil, prevData, feedback) {
-  const sistema = perfil.experiencia_entrenamiento_meses < 12 ? 'lineal' : (perfil.experiencia_entrenamiento_meses < 24 ? 'doble' : 'triple_ondulante');
-  // Lógica simplificada: si el feedback indicó buen rendimiento y sin dolores, aumentar 1-2 series
   if (!feedback) return volBase;
-
   const { dolores_articulares, fatiga_cronica, rendimiento_percibido, fallo_pesos_asignados } = feedback;
   if (fatiga_cronica || dolores_articulares || rendimiento_percibido <= 5) {
-    // Reducir un poco el volumen aunque no sea descarga (regla fatiga)
     return Math.max(2, volBase - 2);
   }
   if (rendimiento_percibido >= 8 && !fallo_pesos_asignados) {
-    // Aumentar 1-2 series
     return Math.min(volBase + 2, VOLUME_TABLE[grupo][determinarNivel(perfil.experiencia_entrenamiento_meses)].MRV[1]);
   }
-  return volBase; // mantenimiento
+  return volBase;
 }
 
 // -----------------------------------------------
@@ -251,7 +248,6 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
     return pattern[dayIndex % pattern.length];
   }
 
-  // Calcular frecuencia semanal por grupo
   const frecuenciaGrupo = {};
   for (let d = 0; d < dias.length; d++) {
     const enfoque = getDayFocus(d);
@@ -303,7 +299,6 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
 
         const repsRange = getRepRange(ejercicio, objetivo);
         const rpe = getRpeTarget(ejercicio, objetivo);
-        // Aplicar factor de intensidad para descarga
         const rpeFinal = Math.round((rpe.target * factorInt) * 10) / 10;
         const rirFinal = Math.max(0, 10 - rpeFinal);
 
@@ -324,10 +319,9 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
 }
 
 // -----------------------------------------------
-// 8. CALCULAR VOLÚMENES PREVIOS Y FEEDBACK
+// 8. CALCULAR VOLÚMENES PREVIOS
 // -----------------------------------------------
 async function calcularVolumenesPrevios(userId, previousWeekId) {
-  // Extraemos el feedback más reciente asociado a esa semana
   const { data: feedback } = await supabase
     .from('weekly_feedback')
     .select('*')
@@ -336,8 +330,6 @@ async function calcularVolumenesPrevios(userId, previousWeekId) {
     .limit(1)
     .single();
 
-  // También podríamos calcular volúmenes reales ejecutados desde workout_sets
-  // Por simplicidad, devolvemos un objeto con el feedback y volúmenes vacíos
   const result = { _feedback: feedback };
   return result;
 }
