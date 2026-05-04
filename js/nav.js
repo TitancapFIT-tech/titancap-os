@@ -1,5 +1,5 @@
 // =====================================================
-// TitanCap.OS - js/nav.js (v3.2 – Navegación unificada)
+// TitanCap.OS - js/nav.js (v3.3 – Anti‑bloqueo)
 // Control de pantallas, enrutamiento y arranque
 // =====================================================
 
@@ -24,6 +24,8 @@ const screens = {
  * @param {object} [data] - Datos adicionales (ej. { dayId } para workout).
  */
 export function showScreen(screenId, data = null) {
+  console.log('[nav] Mostrando pantalla:', screenId);
+
   // Ocultar todas las pantallas
   Object.values(screens).forEach(s => s?.classList.remove('active'));
 
@@ -33,9 +35,17 @@ export function showScreen(screenId, data = null) {
 
   // Mostrar la pantalla deseada
   const target = screens[screenId];
-  if (target) target.classList.add('active');
+  if (target) {
+    target.classList.add('active');
+    console.log('[nav] Pantalla activa:', screenId);
+  } else {
+    console.error('[nav] No se encontró pantalla:', screenId);
+    // Respaldo: si no existe, mostramos auth
+    const authFallback = screens['auth-screen'];
+    if (authFallback) authFallback.classList.add('active');
+  }
 
-  // Llamar a la función de renderizado correspondiente
+  // Disparar la función de renderizado correspondiente
   switch (screenId) {
     case 'auth-screen':
       renderAuthForm();
@@ -78,7 +88,7 @@ export async function logout() {
 
 /**
  * Punto de entrada de la aplicación.
- * 1. Inicializa el listener de instalación PWA (centralizado en auth.js).
+ * 1. Inicializa el listener de instalación PWA.
  * 2. Muestra pantalla de carga con feedback visual.
  * 3. Verifica la sesión y redirige a la pantalla adecuada.
  * 4. Incluye un timeout de seguridad para evitar bloqueos.
@@ -86,30 +96,24 @@ export async function logout() {
 export function initApp() {
   console.log('[TitanCap.OS] initApp() ejecutada');
 
-  // 1. Inicializar el listener de instalación PWA (no duplicado)
+  // 1. Inicializar el listener de instalación PWA
   initPWA();
 
   // 2. Mostrar pantalla de carga con mensaje dinámico
   showScreen('loading-screen');
   const loadingMsg = document.getElementById('loading-message');
-  if (loadingMsg) {
-    loadingMsg.textContent = 'TitanCap.OS está iniciando tu sistema…';
-  }
+  if (loadingMsg) loadingMsg.textContent = 'TitanCap.OS está iniciando tu sistema…';
 
   // 3. Timeout de seguridad (8 segundos)
-  let resolved = false;
   const safetyTimeout = setTimeout(() => {
-    if (!resolved && screens['loading-screen']?.classList.contains('active')) {
-      console.warn('[TitanCap.OS] Timeout de verificación alcanzado. Redirigiendo a auth.');
-      showScreen('auth-screen');
-    }
+    console.warn('[TitanCap.OS] Timeout de verificación alcanzado. Redirigiendo a auth.');
+    showScreen('auth-screen');
   }, 8000);
 
   // 4. Verificar sesión
   console.log('[TitanCap.OS] Verificando sesión…');
   checkSession()
     .then(sessionData => {
-      resolved = true;
       clearTimeout(safetyTimeout);
       console.log('[TitanCap.OS] Sesión verificada:', sessionData);
       if (!sessionData) {
@@ -121,9 +125,8 @@ export function initApp() {
       }
     })
     .catch(error => {
-      resolved = true;
       clearTimeout(safetyTimeout);
-      console.error('[TitanCap.OS] Error en initApp:', error);
+      console.error('[TitanCap.OS] Error en checkSession:', error);
       showScreen('auth-screen');
     });
 }
