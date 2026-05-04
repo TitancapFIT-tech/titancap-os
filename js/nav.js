@@ -1,9 +1,9 @@
 // =====================================================
-// TitanCap.OS - js/nav.js (v3.1 - Auditoría + PWA)
-// Control de pantallas, navegación y evento de instalación
+// TitanCap.OS - js/nav.js (v3.2 – Navegación unificada)
+// Control de pantallas, enrutamiento y arranque
 // =====================================================
 
-import { checkSession, renderAuthForm, signOut } from './auth.js';
+import { checkSession, renderAuthForm, signOut, initPWA } from './auth.js';
 import { renderProfileForm } from './profile.js';
 import { renderDashboard } from './dashboard.js';
 import { renderWorkoutDay } from './workout.js';
@@ -19,22 +19,23 @@ const screens = {
 };
 
 /**
- * Cambia a una pantalla específica y ejecuta su lógica de renderizado.
- * @param {string} screenId - ID de la pantalla a mostrar.
- * @param {object} [data] - Datos adicionales (ej. dayId para workout-screen).
+ * Muestra la pantalla indicada y dispara su lógica de renderizado.
+ * @param {string} screenId - ID del contenedor a mostrar.
+ * @param {object} [data] - Datos adicionales (ej. { dayId } para workout).
  */
 export function showScreen(screenId, data = null) {
   // Ocultar todas las pantallas
   Object.values(screens).forEach(s => s?.classList.remove('active'));
+
   // Cerrar modal de encuesta si estuviera abierto
   const modal = document.getElementById('survey-modal');
   if (modal) modal.classList.remove('active');
 
-  // Mostrar la pantalla solicitada
+  // Mostrar la pantalla deseada
   const target = screens[screenId];
   if (target) target.classList.add('active');
 
-  // Disparar la función de renderizado correspondiente
+  // Llamar a la función de renderizado correspondiente
   switch (screenId) {
     case 'auth-screen':
       renderAuthForm();
@@ -53,15 +54,15 @@ export function showScreen(screenId, data = null) {
 
 /**
  * Navega a la pantalla de entrenamiento del día.
- * @param {string} dayId - ID del workout_day en Supabase.
+ * @param {string} dayId - UUID del workout_day.
  */
 export function navigateToDay(dayId) {
   showScreen('workout-screen', { dayId });
 }
 
 /**
- * Abre el modal de encuesta de fatiga para una semana concreta.
- * @param {string} weekId - ID del weekly_program en Supabase.
+ * Abre el modal de la encuesta de fatiga para una semana.
+ * @param {string} weekId - UUID del weekly_program.
  */
 export function showSurvey(weekId) {
   openSurvey(weekId);
@@ -76,51 +77,41 @@ export async function logout() {
 }
 
 /**
- * Inicializa la aplicación:
- * 1. Captura el evento de instalación PWA.
- * 2. Muestra pantalla de carga.
- * 3. Verifica sesión en Supabase.
- * 4. Redirige a la pantalla correcta (auth, perfil o dashboard).
- * Incluye un timeout de seguridad por si la verificación se bloquea.
+ * Punto de entrada de la aplicación.
+ * 1. Inicializa el listener de instalación PWA (centralizado en auth.js).
+ * 2. Muestra pantalla de carga con feedback visual.
+ * 3. Verifica la sesión y redirige a la pantalla adecuada.
+ * 4. Incluye un timeout de seguridad para evitar bloqueos.
  */
 export function initApp() {
-  console.log('initApp() ejecutada');
+  console.log('[TitanCap.OS] initApp() ejecutada');
 
-  // Capturar evento de instalación PWA lo antes posible
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    window.__pwaDeferredPrompt = e;
-    console.log('Evento beforeinstallprompt capturado');
-  });
+  // 1. Inicializar el listener de instalación PWA (no duplicado)
+  initPWA();
 
-  // Detectar cuando la app fue instalada exitosamente
-  window.addEventListener('appinstalled', () => {
-    console.log('TitanCap.OS instalada exitosamente');
-    window.__pwaDeferredPrompt = null;
-    const modal = document.querySelector('.install-modal-glass');
-    if (modal) modal.remove();
-  });
-
-  // Mostrar pantalla de carga
+  // 2. Mostrar pantalla de carga con mensaje dinámico
   showScreen('loading-screen');
-  console.log('Pantalla de carga mostrada');
+  const loadingMsg = document.getElementById('loading-message');
+  if (loadingMsg) {
+    loadingMsg.textContent = 'TitanCap.OS está iniciando tu sistema…';
+  }
 
-  // Timeout de seguridad: si tras 8 segundos sigue en loading, forzamos auth
+  // 3. Timeout de seguridad (8 segundos)
   let resolved = false;
   const safetyTimeout = setTimeout(() => {
     if (!resolved && screens['loading-screen']?.classList.contains('active')) {
-      console.warn('Timeout de verificación alcanzado. Mostrando auth por seguridad.');
+      console.warn('[TitanCap.OS] Timeout de verificación alcanzado. Redirigiendo a auth.');
       showScreen('auth-screen');
     }
   }, 8000);
 
-  // Verificar sesión
-  console.log('Verificando sesión...');
+  // 4. Verificar sesión
+  console.log('[TitanCap.OS] Verificando sesión…');
   checkSession()
     .then(sessionData => {
       resolved = true;
       clearTimeout(safetyTimeout);
-      console.log('Sesión verificada:', sessionData);
+      console.log('[TitanCap.OS] Sesión verificada:', sessionData);
       if (!sessionData) {
         showScreen('auth-screen');
       } else if (!sessionData.hasProfile) {
@@ -132,7 +123,7 @@ export function initApp() {
     .catch(error => {
       resolved = true;
       clearTimeout(safetyTimeout);
-      console.error('Error en initApp:', error);
+      console.error('[TitanCap.OS] Error en initApp:', error);
       showScreen('auth-screen');
     });
 }
