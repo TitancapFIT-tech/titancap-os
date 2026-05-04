@@ -1,5 +1,5 @@
 // =====================================================
-// TitanCap.OS - js/generator.js (v3.1 - Optimizado)
+// TitanCap.OS - js/generator.js (v3.1 - Optimizado y sin duplicados)
 // =====================================================
 
 import { supabase } from './supabase-client.js';
@@ -43,12 +43,16 @@ function calcularVolumenGrupo(grupo, nivel, perfil) {
   return vol;
 }
 
+// ------------------------------------------------------
+// 1. GENERAR PRIMERA SEMANA (SEMANA DE PRUEBA)
+// ------------------------------------------------------
 export async function generateFirstWeek(userId) {
   const { data: perfil } = await supabase.from('profiles').select('*').eq('id', userId).single();
   if (!perfil) throw new Error('Perfil no encontrado');
 
   const { data: equipment } = await supabase.from('user_equipment').select('exercise_id, exercises(*)').eq('user_id', userId);
   const availableExercises = equipment.map(e => e.exercises);
+
   const nivel = determinarNivel(perfil.experiencia_entrenamiento_meses);
   const splitConfig = SPLIT_PATTERNS[perfil.dias_disponibles] || SPLIT_PATTERNS[4];
   const { sistema } = determinarSistemaProgresion(perfil);
@@ -76,27 +80,52 @@ export async function generateFirstWeek(userId) {
 
   const today = new Date();
   const weekData = {
-    user_id: userId, week_number: 1, fecha_inicio: today.toISOString().split('T')[0],
-    type: 'normal', split_type: splitConfig.type, progression_system: sistema, es_semana_prueba: true
+    user_id: userId,
+    week_number: 1,
+    fecha_inicio: today.toISOString().split('T')[0],
+    type: 'normal',
+    split_type: splitConfig.type,
+    progression_system: sistema,
+    es_semana_prueba: true
   };
 
-  const { data: weekProgram } = await supabase.from('weekly_programs')
-    .upsert(weekData, { onConflict: 'user_id, week_number' }).select().single();
+  const { data: weekProgram } = await supabase
+    .from('weekly_programs')
+    .upsert(weekData, { onConflict: 'user_id, week_number' })
+    .select()
+    .single();
+
   if (!weekProgram) throw new Error('Error creando semana');
 
-  // Eliminar días anteriores de forma segura
+  // Eliminar días previos de manera segura
   await supabase.from('workout_days').delete().eq('weekly_program_id', weekProgram.id);
 
   await construirDias(weekProgram, perfil, availableExercises, volumenObjetivo, {
-    factorInt: 1.0, esSemanaPrueba: true, sistemaProgresion: sistema,
-    pesosIniciales: { sentadilla: perfil.rm_sentadilla, press_banca: perfil.rm_banca, peso_muerto: perfil.rm_peso_muerto }
+    factorInt: 1.0,
+    esSemanaPrueba: true,
+    sistemaProgresion: sistema,
+    pesosIniciales: {
+      sentadilla: perfil.rm_sentadilla || 0,
+      press_banca: perfil.rm_banca || 0,
+      peso_muerto: perfil.rm_peso_muerto || 0
+    }
   });
+
   return weekProgram;
 }
 
+// ------------------------------------------------------
+// 2. GENERAR SIGUIENTE SEMANA (NORMAL O DESCARGA)
+// ------------------------------------------------------
 export async function generateNextWeek(userId, decision, deloadPorBasico = []) {
   const { data: perfil } = await supabase.from('profiles').select('*').eq('id', userId).single();
-  const { data: lastWeek } = await supabase.from('weekly_programs').select('*').eq('user_id', userId).order('week_number', { ascending: false }).limit(1).single();
+  const { data: lastWeek } = await supabase
+    .from('weekly_programs')
+    .select('*')
+    .eq('user_id', userId)
+    .order('week_number', { ascending: false })
+    .limit(1)
+    .single();
 
   const newWeekNumber = (lastWeek?.week_number || 0) + 1;
   const nivel = determinarNivel(perfil.experiencia_entrenamiento_meses);
@@ -108,12 +137,18 @@ export async function generateNextWeek(userId, decision, deloadPorBasico = []) {
 
   let factorVol = 1.0, factorInt = 1.0, weekType = 'normal';
   if (decision === 'deload' || decision === 'deload_parcial') {
-    factorVol = DELOAD_RULES.volumePercent; factorInt = DELOAD_RULES.intensityPercent; weekType = 'descarga';
+    factorVol = DELOAD_RULES.volumePercent;
+    factorInt = DELOAD_RULES.intensityPercent;
+    weekType = 'descarga';
   }
 
   const volumenObjetivo = {};
   const grupos = ['pecho','espalda','deltoides','cuadriceps','isquios','gluteos','biceps','triceps','pantorrilla','abdomen','antebrazo'];
-  grupos.forEach(g => { volumenObjetivo[g] = Math.round(calcularVolumenGrupo(g, nivel, perfil) * factorVol); });
+  grupos.forEach(g => {
+    let vol = calcularVolumenGrupo(g, nivel, perfil);
+    vol = Math.round(vol * factorVol);
+    volumenObjetivo[g] = vol;
+  });
 
   const basicosVol = {
     sentadilla: Math.round(calcularVolumenBasico('sentadilla', perfil) * factorVol),
@@ -124,22 +159,47 @@ export async function generateNextWeek(userId, decision, deloadPorBasico = []) {
   volumenObjetivo['pecho'] = Math.max(volumenObjetivo['pecho'], basicosVol.press_banca);
   volumenObjetivo['espalda'] = Math.max(volumenObjetivo['espalda'], basicosVol.peso_muerto);
 
-  const fecha = new Date(); fecha.setDate(fecha.getDate() + 1);
+  if (volumenObjetivo['pecho'] > 10) {
+    volumenObjetivo['triceps'] = Math.round(volumenObjetivo['triceps'] * 0.7);
+    volumenObjetivo['deltoides'] = Math.round(volumenObjetivo['deltoides'] * 0.8);
+  }
+  if (volumenObjetivo['espalda'] > 12 && basicosVol.peso_muerto > 8) {
+    volumenObjetivo['isquios'] = Math.round(volumenObjetivo['isquios'] * 0.7);
+  }
+
+  const fecha = new Date();
+  fecha.setDate(fecha.getDate() + 1);
   const weekData = {
-    user_id: userId, week_number: newWeekNumber, fecha_inicio: fecha.toISOString().split('T')[0],
-    type: weekType, split_type: splitConfig.type, progression_system: sistema, es_semana_prueba: false
+    user_id: userId,
+    week_number: newWeekNumber,
+    fecha_inicio: fecha.toISOString().split('T')[0],
+    type: weekType,
+    split_type: splitConfig.type,
+    progression_system: sistema,
+    es_semana_prueba: false
   };
 
-  const { data: newWeek } = await supabase.from('weekly_programs')
-    .upsert(weekData, { onConflict: 'user_id, week_number' }).select().single();
+  const { data: newWeek } = await supabase
+    .from('weekly_programs')
+    .upsert(weekData, { onConflict: 'user_id, week_number' })
+    .select()
+    .single();
+
+  if (!newWeek) throw new Error('Error creando nueva semana');
+
   await supabase.from('workout_days').delete().eq('weekly_program_id', newWeek.id);
-  await construirDias(newWeek, perfil, availableExercises, volumenObjetivo, { factorInt, deloadPorBasico });
+  await construirDias(newWeek, perfil, availableExercises, volumenObjetivo, {
+    factorInt,
+    sistemaProgresion: sistema,
+    deloadPorBasico
+  });
+
   return newWeek;
 }
 
-// ===============================================
-// LÓGICA PRINCIPAL OPTIMIZADA (BATCH INSERT)
-// ===============================================
+// ------------------------------------------------------
+// 3. CONSTRUIR DÍAS (BATCH INSERT OPTIMIZADO)
+// ------------------------------------------------------
 async function construirDias(weekProgram, perfil, availableExercises, volumenObjetivo, opts = {}) {
   const diasNombres = SPLIT_PATTERNS[perfil.dias_disponibles]?.days || SPLIT_PATTERNS[4].days;
   const splitType = weekProgram.split_type;
@@ -165,17 +225,6 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
     return pattern[dayIndex % pattern.length];
   }
 
-  // 1. Preparar arrays para inserción masiva
-  const diasParaInsertar = [];
-  const ejerciciosParaInsertar = [];
-  const dupCiclo = ['fuerza', 'volumen', 'potencia'];
-  let dupIndex = 0;
-  let wupPhase = 'hipertrofia';
-  if (sistemaProgresion === 'wup') {
-    const fases = ['hipertrofia', 'fuerza', 'pico', 'descarga'];
-    wupPhase = fases[(weekProgram.week_number - 1) % 4];
-  }
-
   const frecuenciaGrupo = {};
   for (let d = 0; d < diasNombres.length; d++) {
     const enfoque = getDayFocus(d);
@@ -187,7 +236,18 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
     if (frecuenciaGrupo[grupo]) volumenDiario[grupo] = Math.max(1, Math.round(volTotal / frecuenciaGrupo[grupo]));
   }
 
-  // Construir datos para cada día
+  const dupCiclo = ['fuerza', 'volumen', 'potencia'];
+  let dupIndex = 0;
+  let wupPhase = 'hipertrofia';
+  if (sistemaProgresion === 'wup') {
+    const fases = ['hipertrofia', 'fuerza', 'pico', 'descarga'];
+    wupPhase = fases[(weekProgram.week_number - 1) % 4];
+  }
+
+  // Arrays para batch insert
+  const diasParaInsertar = [];
+  const ejerciciosParaInsertar = [];
+
   for (let d = 0; d < diasNombres.length; d++) {
     const enfoque = getDayFocus(d);
     let dupType = null;
@@ -196,7 +256,7 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
       dupIndex++;
     }
 
-    const diaTempId = `temp_${d}`; // ID temporal para relacionar ejercicios
+    const diaTempId = `temp_${d}`;
     diasParaInsertar.push({
       temp_id: diaTempId,
       weekly_program_id: weekProgram.id,
@@ -226,9 +286,10 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
         const ejercicio = ejerciciosDisponibles[i];
         let series = ejercicio.es_basico ? Math.min(4, seriesRestantes) : Math.min(3, seriesRestantes);
         series = Math.max(1, series);
+
         const repsRange = getRepRange(ejercicio, perfil.objetivo, dupType, wupPhase);
         const rpeTarget = getRpeTarget(ejercicio, perfil.objetivo, dupType, wupPhase, factorInt);
-        
+
         let pesoSugerido = null;
         if (ejercicio.es_basico && esSemanaPrueba && pesosIniciales[mapearBasico(ejercicio.nombre)]) {
           const rm = pesosIniciales[mapearBasico(ejercicio.nombre)];
@@ -248,45 +309,90 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
           wup_phase: sistemaProgresion === 'wup' ? wupPhase : null,
           orden: orden++
         });
+
         seriesRestantes -= series;
       }
     }
   }
 
-  // 2. Inserción masiva de días
-  const { data: diasInsertados } = await supabase.from('workout_days').insert(
-    diasParaInsertar.map(d => ({ ...d, temp_id: undefined }))
-  ).select('id, day_number');
+  // Inserción masiva de días
+  const { data: diasInsertados } = await supabase
+    .from('workout_days')
+    .insert(diasParaInsertar.map(({ temp_id, ...rest }) => rest))
+    .select('id, day_number');
 
   if (!diasInsertados) throw new Error('Error insertando días');
 
-  // 3. Mapear IDs reales y asignar a ejercicios
-  const ejerciciosFinales = [];
-  ejerciciosParaInsertar.forEach(ej => {
-    const diaReal = diasInsertados.find((d, i) => i === parseInt(ej.dia_temp_id.split('_')[1]));
-    if (diaReal) {
-      ejerciciosFinales.push({
-        workout_day_id: diaReal.id,
-        exercise_id: ej.exercise_id,
-        series_objetivo: ej.series_objetivo,
-        reps_min: ej.reps_min,
-        reps_max: ej.reps_max,
-        rpe_objetivo: ej.rpe_objetivo,
-        rir_objetivo: ej.rir_objetivo,
-        peso_sugerido: ej.peso_sugerido,
-        dup_type: ej.dup_type,
-        wup_phase: ej.wup_phase,
-        orden: ej.orden
-      });
-    }
+  // Mapeo de IDs temporales a reales
+  const ejerciciosFinales = ejerciciosParaInsertar.map(ej => {
+    const diaReal = diasInsertados.find((_, idx) => `temp_${idx}` === ej.dia_temp_id);
+    if (!diaReal) throw new Error('No se encontró día para ejercicio');
+    return {
+      workout_day_id: diaReal.id,
+      exercise_id: ej.exercise_id,
+      series_objetivo: ej.series_objetivo,
+      reps_min: ej.reps_min,
+      reps_max: ej.reps_max,
+      rpe_objetivo: ej.rpe_objetivo,
+      rir_objetivo: ej.rir_objetivo,
+      peso_sugerido: ej.peso_sugerido,
+      dup_type: ej.dup_type,
+      wup_phase: ej.wup_phase,
+      orden: ej.orden
+    };
   });
 
-  // 4. Inserción masiva de ejercicios
+  // Inserción masiva de ejercicios
   if (ejerciciosFinales.length > 0) {
-    await supabase.from('workout_exercises').insert(ejerciciosFinales);
+    const { error } = await supabase.from('workout_exercises').insert(ejerciciosFinales);
+    if (error) console.error('Error insertando ejercicios:', error);
   }
 }
 
-function getRepRange(ejercicio, objetivo, dupType, wupPhase) { /* lógica sin cambios */ }
-function getRpeTarget(ejercicio, objetivo, dupType, wupPhase, factorInt) { /* lógica sin cambios */ }
-function mapearBasico(nombre) { /* lógica sin cambios */ }
+// ------------------------------------------------------
+// FUNCIONES AUXILIARES
+// ------------------------------------------------------
+function getRepRange(ejercicio, objetivo, dupType, wupPhase) {
+  if (dupType === 'fuerza') return REP_RANGES.dup_fuerza;
+  if (dupType === 'volumen') return REP_RANGES.dup_volumen;
+  if (dupType === 'potencia') return REP_RANGES.dup_potencia;
+  if (wupPhase === 'hipertrofia') return REP_RANGES.wup_hipertrofia;
+  if (wupPhase === 'fuerza') return REP_RANGES.wup_fuerza;
+  if (wupPhase === 'pico') return REP_RANGES.wup_pico;
+  if (wupPhase === 'descarga') return REP_RANGES.wup_descarga;
+
+  if (ejercicio.es_basico) {
+    if (objetivo === 'fuerza') return REP_RANGES.basico_fuerza;
+    return REP_RANGES.basico_hipertrofia;
+  } else if (ejercicio.tipo.startsWith('multi')) {
+    return REP_RANGES.alta_demanda_axial;
+  } else {
+    return REP_RANGES.aislado_hipertrofia;
+  }
+}
+
+function getRpeTarget(ejercicio, objetivo, dupType, wupPhase, factorInt = 1.0) {
+  let rpeBase = 7.5;
+  if (ejercicio.es_basico || ejercicio.tipo.startsWith('multi')) rpeBase = 7.5;
+  else rpeBase = 8.5;
+
+  if (dupType === 'fuerza') rpeBase = 8.5;
+  else if (dupType === 'volumen') rpeBase = 7.0;
+  else if (dupType === 'potencia') rpeBase = 5.5;
+  if (wupPhase === 'hipertrofia') rpeBase = 8.0;
+  else if (wupPhase === 'fuerza') rpeBase = 8.5;
+  else if (wupPhase === 'pico') rpeBase = 9.5;
+  else if (wupPhase === 'descarga') rpeBase = 6.0;
+
+  const rpe = Math.round(rpeBase * factorInt * 10) / 10;
+  return { target: rpe, rir: Math.max(0, Math.round((10 - rpe) * 10) / 10) };
+}
+
+function mapearBasico(nombre) {
+  const map = {
+    'Sentadilla libre trasera': 'sentadilla',
+    'Peso muerto convencional': 'peso_muerto',
+    'Press de banca plano con barra': 'press_banca'
+  };
+  return map[nombre] || 'press_banca';
+}
