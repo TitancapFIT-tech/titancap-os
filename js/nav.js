@@ -1,5 +1,5 @@
 // =====================================================
-// TitanCap.OS - js/nav.js (CORREGIDO - integración limpia)
+// TitanCap.OS - js/nav.js (v3 - Ajustado PWA + Navegación)
 // =====================================================
 
 import { checkSession, renderAuthForm, signOut } from './auth.js';
@@ -76,12 +76,32 @@ export async function logout() {
 
 /**
  * Inicializa la aplicación:
- * 1. Muestra pantalla de carga.
- * 2. Verifica sesión en Supabase.
- * 3. Redirige a la pantalla correcta (auth, perfil o dashboard).
+ * 1. Captura el evento de instalación PWA.
+ * 2. Muestra pantalla de carga.
+ * 3. Verifica sesión en Supabase.
+ * 4. Redirige a la pantalla correcta (auth, perfil o dashboard).
  * Incluye un timeout de seguridad por si la verificación se bloquea.
  */
 export function initApp() {
+  // Capturar evento de instalación PWA lo antes posible
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevenir que el navegador muestre el diálogo automático
+    e.preventDefault();
+    // Guardar el evento en window para que dashboard.js lo use
+    window.__pwaDeferredPrompt = e;
+    console.log('Evento beforeinstallprompt capturado');
+  });
+
+  // Detectar cuando la app fue instalada exitosamente
+  window.addEventListener('appinstalled', () => {
+    console.log('TitanCap.OS instalada exitosamente');
+    window.__pwaDeferredPrompt = null;
+    // Eliminar modal de instalación si existe
+    const modal = document.querySelector('.install-modal-glass');
+    if (modal) modal.remove();
+  });
+
+  // Mostrar pantalla de carga
   showScreen('loading-screen');
 
   // Timeout de seguridad: si tras 6 segundos sigue en loading, forzamos auth
