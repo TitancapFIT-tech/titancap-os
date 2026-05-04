@@ -1,7 +1,7 @@
 /* =====================================================
-   TitanCap.OS - styles.css (v2 - Premium)
-   Estética avanzada: blanco, negro, gris
-   Animaciones fluidas y microinteracciones
+   TitanCap.OS - styles.css (v3 - Auditado)
+   Estética premium: blanco, negro, gris
+   Animaciones fluidas, tipografía de fuerza, PWA
    ===================================================== */
 
 /* ---------- Variables ---------- */
@@ -24,6 +24,7 @@
     --warn: #ff9800;
     --warn-bg: rgba(255, 152, 0, 0.15);
     --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-display: 'Bebas Neue', sans-serif;
     --transition-fast: 0.15s cubic-bezier(0.25, 0.8, 0.25, 1.2);
     --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.4);
@@ -111,9 +112,10 @@ body {
     text-align: center;
 }
 .titan-logo {
-    font-size: 2.8rem;
+    font-family: var(--font-display);
+    font-size: 3.2rem;
     font-weight: 900;
-    letter-spacing: -3px;
+    letter-spacing: -2px;
     text-align: center;
     color: var(--text-primary);
     user-select: none;
@@ -159,11 +161,12 @@ body {
     padding-bottom: 16px;
 }
 .top-bar h2 {
-    font-size: 1.3rem;
+    font-family: var(--font-display);
+    font-size: 1.6rem;
     font-weight: 700;
     margin: 0;
     white-space: nowrap;
-    letter-spacing: -0.5px;
+    letter-spacing: 1.5px;
     color: var(--text-primary);
 }
 
@@ -464,6 +467,7 @@ select {
     position: relative;
     overflow: hidden;
     box-shadow: var(--shadow-card);
+    will-change: transform;
 }
 .day-card::before {
     content: '';
@@ -596,6 +600,9 @@ select {
     border-color: var(--accent);
     box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
 }
+.set-row input.weight-suggested {
+    color: var(--text-muted);
+}
 .check-btn {
     width: 30px;
     height: 30px;
@@ -686,6 +693,56 @@ select {
     color: var(--text-secondary);
     margin-bottom: 20px;
     font-size: 0.9rem;
+}
+
+/* ---------- Modal de Instalación PWA ---------- */
+.install-modal-glass {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    background: rgba(20, 20, 20, 0.95);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-xl);
+    padding: 24px;
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+    animation: modalSlideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+}
+@keyframes modalSlideUp {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(40px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+.install-modal-glass h3 {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+}
+.install-modal-glass p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+}
+.install-modal-glass .btn-primary {
+    margin-bottom: 12px;
+}
+.btn-text {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
 }
 
 /* ---------- Stress Indicator ---------- */
