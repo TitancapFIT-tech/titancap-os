@@ -1,43 +1,86 @@
 // =====================================================
-// TitanCap.OS - js/dashboard.js (v3.1 - Auditoría Completa)
-// Renderizado limpio sin duplicados, PWA install,
-// frases motivacionales, saludo personalizado y
-// botones de acción con lógica de semana completada.
+// TitanCap.OS - js/dashboard.js (v3.2 - Auditoría final)
+// Dashboard con pago, PWA, frases sin repetición,
+// skeleton loader y progresión visible.
 // =====================================================
 
-import { supabase } from './supabase-client.js';
-import { showScreen, navigateToDay, showSurvey, logout } from './nav.js';
+import { supabase, checkPaymentStatus, getUserProfile, getWeeklyProgram, trackPhraseUsage } from './supabase-client.js';
+import { initPWA, signOut } from './auth.js';
+import { showScreen, navigateToDay, showSurvey } from './nav.js';
 
+// ------------------------------------------------------
+// Estado global
+// ------------------------------------------------------
 let currentWeekId = null;
 let currentWeekNumber = null;
+let pagoAprobado = false;
 
-/**
- * Renderiza el dashboard principal:
- * - Saludo personalizado con el nombre del atleta y número de semana.
- * - Frase motivacional aleatoria desde Supabase.
- * - Tarjetas de días de entrenamiento de la semana activa.
- * - Botón de completar semana / encuesta de fatiga.
- * - Botón de reinicio de semana.
- * - Botón de cerrar sesión.
- * - Modal de instalación PWA (si aplica).
- */
+// ------------------------------------------------------
+// Skeleton Loader (Tarea 4)
+// ------------------------------------------------------
+function showSkeleton() {
+  const container = document.getElementById('dashboard-screen');
+  if (!container) return;
+
+  // Si no existe el esqueleto, lo insertamos
+  if (!document.getElementById('skeleton-loader')) {
+    const skeletonHTML = `
+      <div id="skeleton-loader" class="skeleton-loader">
+        <div class="skeleton-header"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+    `;
+    // Insertar al principio del dashboard
+    container.insertAdjacentHTML('afterbegin', skeletonHTML);
+  }
+  // Mostrar
+  const skeleton = document.getElementById('skeleton-loader');
+  if (skeleton) skeleton.style.display = 'block';
+
+  // Ocultar el contenido real mientras carga
+  const content = document.getElementById('dashboard-content');
+  if (content) content.style.display = 'none';
+}
+
+function hideSkeleton() {
+  const skeleton = document.getElementById('skeleton-loader');
+  if (skeleton) skeleton.style.display = 'none';
+
+  const content = document.getElementById('dashboard-content');
+  if (content) content.style.display = 'block';
+}
+
+// ------------------------------------------------------
+// Renderizado principal del dashboard
+// ------------------------------------------------------
 export async function renderDashboard() {
+  // Activar skeleton loader
+  showSkeleton();
+
   // 1. Verificar autenticación
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     showScreen('auth-screen');
+    hideSkeleton();
     return;
   }
 
-  // 2. Obtener nombre del perfil
-  const { data: perfil } = await supabase
-    .from('profiles')
-    .select('nombre')
-    .eq('id', user.id)
-    .single();
+  // 2. Obtener perfil
+  const perfil = await getUserProfile(user.id);
+  if (!perfil) {
+    // Sin perfil → onboarding
+    showScreen('profile-screen'); // o survey-screen, según prefieras
+    hideSkeleton();
+    return;
+  }
 
-  // 3. Obtener la semana activa más reciente
-  const { data: activeWeek, error } = await supabase
+  // 3. Verificar estado del pago (Tarea 5)
+  pagoAprobado = await checkPaymentStatus(user.email);
+
+  // 4. Obtener la semana activa más reciente
+  const { data: activeWeek, error: weekError } = await supabase
     .from('weekly_programs')
     .select('*')
     .eq('user_id', user.id)
@@ -45,25 +88,44 @@ export async function renderDashboard() {
     .limit(1)
     .single();
 
-  // Si no hay semana activa, redirigir a creación de perfil
-  if (error || !activeWeek) {
+  if (weekError || !activeWeek) {
+    // Si no hay semana, redirigir a creación de perfil/generador
     showScreen('profile-screen');
+    hideSkeleton();
     return;
   }
 
-  // Guardar referencias globales de la semana actual
   currentWeekId = activeWeek.id;
   currentWeekNumber = activeWeek.week_number;
 
-  // 4. Mostrar saludo personalizado
-  const nombre = perfil?.nombre || 'Atleta';
-  document.getElementById('saludo-personalizado').textContent =
-    `Hola ${nombre}, es hora de tu Semana ${currentWeekNumber}`;
+  // 5. Mostrar saludo y sistema de progresión actual
+  const nombre = perfil.nombre || 'Atleta';
+  const sistemaProgresion = activeWeek.progression_system
+    ? traducirSistema(activeWeek.progression_system)
+    : 'No definido';
 
-  // 5. Cargar frase motivacional aleatoria
-  cargarFraseMotivacional();
+  const greetingEl = document.getElementById('saludo-personalizado');
+  if (greetingEl) {
+    greetingEl.textContent = `Hola ${nombre}, es hora de tu Semana ${currentWeekNumber}`;
+  }
+  const progressionEl = document.getElementById('progression-label');
+  if (progressionEl) {
+    progressionEl.textContent = `Sistema: ${sistemaProgresion}`;
+  }
 
-  // 6. Obtener los días de la semana activa
+  // 6. Banner de pago pendiente (si no ha pagado)
+  const bannerPago = document.getElementById('payment-banner');
+  if (!pagoAprobado && bannerPago) {
+    bannerPago.innerHTML = `<p>⚠️ Acceso limitado. <a href="#/pago" class="payment-link">Activar plan completo</a></p>`;
+    bannerPago.style.display = 'block';
+  } else if (bannerPago) {
+    bannerPago.style.display = 'none';
+  }
+
+  // 7. Cargar frase motivacional (evitando repeticiones)
+  await cargarFraseMotivacional(user.id, currentWeekNumber);
+
+  // 8. Obtener los días de la semana activa
   const { data: days, error: daysError } = await supabase
     .from('workout_days')
     .select('*')
@@ -72,156 +134,146 @@ export async function renderDashboard() {
 
   if (daysError) {
     console.error('Error al obtener días:', daysError);
+    hideSkeleton();
     return;
   }
 
-  // 7. Renderizar tarjetas de días (limpiar contenedor primero)
+  // 9. Renderizar tarjetas de días
   const container = document.getElementById('week-days-container');
-  container.innerHTML = '';
-
-  days.forEach(day => {
-    const card = document.createElement('div');
-    card.className = 'day-card' + (day.completed ? ' completed' : '');
-    card.innerHTML = `
-      <h3>Día ${day.day_number}</h3>
-      <p>${day.enfoque || ''}</p>
-      <span class="status">${day.completed ? '✅' : '⏳'}</span>
-    `;
-    // Navegar al día al hacer clic
-    card.addEventListener('click', () => {
-      navigateToDay(day.id);
+  if (container) {
+    container.innerHTML = '';
+    days.forEach(day => {
+      const card = document.createElement('div');
+      card.className = 'day-card' + (day.completed ? ' completed' : '');
+      card.innerHTML = `
+        <h3>Día ${day.day_number}</h3>
+        <p>${day.enfoque || ''}</p>
+        <span class="status">${day.completed ? '✅' : '⏳'}</span>
+      `;
+      card.addEventListener('click', () => {
+        navigateToDay(day.id);
+      });
+      container.appendChild(card);
     });
-    container.appendChild(card);
-  });
 
-  // 8. Configurar botón "Completar Semana" / "Encuesta de Fatiga"
-  const allCompleted = days.every(d => d.completed);
-  const btnCompletar = document.getElementById('btn-completar-semana');
-  if (allCompleted) {
-    btnCompletar.textContent = '✅ Encuesta de Fatiga';
-    btnCompletar.onclick = () => showSurvey(currentWeekId);
-  } else {
-    btnCompletar.textContent = '⏳ Semana en progreso';
-    btnCompletar.onclick = () => alert('Completa todos los días antes de enviar la encuesta.');
+    // Botón completar semana / encuesta
+    const allCompleted = days.every(d => d.completed);
+    const btnCompletar = document.getElementById('btn-completar-semana');
+    if (btnCompletar) {
+      if (allCompleted) {
+        btnCompletar.textContent = '✅ Encuesta de Fatiga';
+        btnCompletar.onclick = () => showSurvey(currentWeekId);
+      } else {
+        btnCompletar.textContent = '⏳ Semana en progreso';
+        btnCompletar.onclick = () => alert('Completa todos los días antes de enviar la encuesta.');
+      }
+    }
   }
 
-  // 9. Botón de reinicio de semana
-  document.getElementById('btn-reiniciar').onclick = async () => {
-    if (confirm('¿Reiniciar todo? Perderás el progreso de esta semana y empezarás de nuevo.')) {
-      await supabase.from('weekly_programs').delete().eq('id', currentWeekId);
-      showScreen('profile-screen');
-    }
-  };
+  // 10. Botón reiniciar semana (conservado)
+  const btnReiniciar = document.getElementById('btn-reiniciar');
+  if (btnReiniciar) {
+    btnReiniciar.onclick = async () => {
+      if (confirm('¿Reiniciar todo? Perderás el progreso de esta semana y empezarás de nuevo.')) {
+        await supabase.from('weekly_programs').delete().eq('id', currentWeekId);
+        showScreen('profile-screen');
+      }
+    };
+  }
 
-  // 10. Botón de cerrar sesión
+  // 11. Botón cerrar sesión
   const logoutBtn = document.getElementById('btn-logout');
   if (logoutBtn) {
-    logoutBtn.onclick = () => logout();
+    logoutBtn.onclick = async () => {
+      await signOut();
+      window.location.reload(); // Redirigir al login
+    };
   }
 
-  // 11. Inicializar lógica de instalación PWA
-  initPWAInstall();
+  // 12. Inicializar PWA (capturar beforeinstallprompt)
+  initPWA();
+
+  // 13. Si el pago está aprobado, disparar instalación PWA (con retardo)
+  if (pagoAprobado) {
+    setTimeout(() => {
+      // Se dispara un evento personalizado que auth.js escucha para mostrar el modal premium
+      window.dispatchEvent(new CustomEvent('triggerPWAInstall', {
+        detail: { userName: perfil.nombre }
+      }));
+    }, 1500);
+  }
+
+  // Quitar skeleton y mostrar contenido
+  hideSkeleton();
 }
 
-/**
- * Obtiene una frase aleatoria de la tabla motivational_phrases
- * y la muestra debajo del saludo. Si falla, muestra frase de respaldo.
- */
-async function cargarFraseMotivacional() {
+// ------------------------------------------------------
+// Frase motivacional sin repeticiones
+// ------------------------------------------------------
+async function cargarFraseMotivacional(userId, weekNumber) {
   const fraseEl = document.getElementById('frase-motivacional');
   if (!fraseEl) return;
 
   try {
-    const { data: phrases, error } = await supabase
+    // 1. Obtener todas las frases
+    const { data: allPhrases, error: errPhrases } = await supabase
       .from('motivational_phrases')
-      .select('phrase, author');
+      .select('*');
 
-    if (error) throw error;
-
-    if (phrases && phrases.length > 0) {
-      const random = phrases[Math.floor(Math.random() * phrases.length)];
-      fraseEl.textContent = `"${random.phrase}" — ${random.author}`;
-    } else {
-      // Respaldo si la tabla está vacía
-      fraseEl.textContent = '"La disciplina es el puente entre las metas y los logros." — Jim Rohn';
+    if (errPhrases || !allPhrases?.length) {
+      throw new Error('No hay frases disponibles');
     }
+
+    // 2. Obtener las frases ya mostradas a este usuario
+    const { data: usedPhrases, error: errUsed } = await supabase
+      .from('user_phrase_history')
+      .select('phrase_id')
+      .eq('user_id', userId);
+
+    if (errUsed) {
+      console.warn('No se pudo consultar historial de frases', errUsed);
+    }
+
+    // 3. Filtrar las no usadas
+    const usedIds = usedPhrases ? usedPhrases.map(u => u.phrase_id) : [];
+    const unusedPhrases = allPhrases.filter(p => !usedIds.includes(p.id));
+
+    // 4. Si todas se han usado, reiniciamos el historial (se permite repetir)
+    let phrase;
+    if (unusedPhrases.length === 0) {
+      // Opcional: eliminar historial para empezar de nuevo
+      await supabase.from('user_phrase_history').delete().eq('user_id', userId);
+      phrase = allPhrases[Math.floor(Math.random() * allPhrases.length)];
+    } else {
+      phrase = unusedPhrases[Math.floor(Math.random() * unusedPhrases.length)];
+    }
+
+    // 5. Registrar la frase usada
+    const inserted = await trackPhraseUsage(userId, phrase.id, weekNumber);
+    if (!inserted) {
+      console.warn('No se pudo registrar la frase, pero continuamos');
+    }
+
+    // 6. Mostrar
+    fraseEl.textContent = `"${phrase.phrase}" — ${phrase.author}`;
     fraseEl.style.display = 'block';
   } catch (err) {
     console.warn('Error cargando frase motivacional:', err.message);
-    fraseEl.textContent = '"El dolor de la disciplina no es nada comparado con el dolor del arrepentimiento." — Anónimo';
+    fraseEl.textContent = '"La disciplina es el puente entre las metas y los logros." — Jim Rohn';
     fraseEl.style.display = 'block';
   }
 }
 
-// =====================================================
-// PWA: INSTALACIÓN NATIVA
-// =====================================================
-
-let deferredPrompt = null;
-
-/**
- * Inicializa el listener para el evento beforeinstallprompt
- * y muestra el modal de instalación si corresponde.
- */
-function initPWAInstall() {
-  // Verificar si ya está instalada como PWA
-  if (window.matchMedia('(display-mode: standalone)').matches) {
-    console.log('App ya instalada como PWA');
-    return;
-  }
-
-  window.addEventListener('beforeinstallprompt', (e) => {
-    // Prevenir que el navegador muestre el diálogo automático
-    e.preventDefault();
-    // Guardar el evento para usarlo después
-    deferredPrompt = e;
-
-    // Mostrar modal de instalación después de 3 segundos
-    setTimeout(() => {
-      if (document.getElementById('dashboard-screen').classList.contains('active')) {
-        mostrarModalInstalacion();
-      }
-    }, 3000);
-  });
-
-  // Detectar cuando la app fue instalada
-  window.addEventListener('appinstalled', () => {
-    console.log('TitanCap.OS instalada exitosamente');
-    deferredPrompt = null;
-    // Eliminar modal si existe
-    const modal = document.querySelector('.install-modal-glass');
-    if (modal) modal.remove();
-  });
-}
-
-/**
- * Muestra un modal elegante para invitar a instalar la PWA.
- */
-function mostrarModalInstalacion() {
-  // Verificar que no exista ya el modal
-  if (document.querySelector('.install-modal-glass')) return;
-
-  const modal = document.createElement('div');
-  modal.className = 'install-modal-glass';
-  modal.innerHTML = `
-    <h3>⚡ Instalar TitanCap.OS</h3>
-    <p>Accede a tu entrenamiento sin abrir el navegador. Como una app nativa, rápida y siempre disponible.</p>
-    <button class="btn-primary" id="btn-install">Instalar Ahora</button>
-    <button class="btn-text" id="btn-dismiss">Quizás después</button>
-  `;
-  document.body.appendChild(modal);
-
-  document.getElementById('btn-install').addEventListener('click', async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      console.log(`PWA instalación: ${outcome}`);
-      deferredPrompt = null;
-    }
-    modal.remove();
-  });
-
-  document.getElementById('btn-dismiss').addEventListener('click', () => {
-    modal.remove();
-  });
+// ------------------------------------------------------
+// Traducción visual del sistema de progresión
+// ------------------------------------------------------
+function traducirSistema(sistema) {
+  const map = {
+    lineal: 'Lineal Sesión a Sesión',
+    doble: 'Doble Progresión',
+    triple: 'Triple Progresión',
+    dup: 'Ondulación Diaria (DUP)',
+    wup: 'Ondulación Semanal (WUP)'
+  };
+  return map[sistema] || sistema;
 }
