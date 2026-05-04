@@ -1,6 +1,6 @@
 // =====================================================
-// TitanCap.OS - js/workout.js (v3 - Auditoría Completa)
-// Registro de entrenamiento con e1RM, Stress Index,
+// TitanCap.OS - js/workout.js (v3.1 - Auditoría Completa)
+// Registro de series con e1RM, Stress Index,
 // pesos sugeridos, validaciones y feedback sonoro
 // =====================================================
 
@@ -62,6 +62,9 @@ export async function renderWorkoutDay(dayId) {
   const container = document.getElementById('ejercicios-container');
   container.innerHTML = '';
 
+  // Obtener el ID del usuario actual para consultas posteriores
+  const { data: { user } } = await supabase.auth.getUser();
+
   for (const ex of exercises) {
     const block = document.createElement('div');
     block.className = 'exercise-block';
@@ -74,8 +77,8 @@ export async function renderWorkoutDay(dayId) {
 
     // Calcular e1RM previo para básicos y sugerir peso
     let pesoSugerido = ex.peso_sugerido || null;
-    if (ex.exercises.es_basico) {
-      const ultimoE1RM = await obtenerUltimoE1RM((await supabase.auth.getUser()).data.user.id, ex.exercise_id);
+    if (ex.exercises.es_basico && user) {
+      const ultimoE1RM = await obtenerUltimoE1RM(user.id, ex.exercise_id);
       if (ultimoE1RM && ultimoE1RM > 0) {
         const repsMedio = Math.round((ex.reps_min + ex.reps_max) / 2);
         pesoSugerido = sugerirPeso(ultimoE1RM, repsMedio, ex.rir_objetivo || 2);
@@ -265,6 +268,7 @@ function attachAllListeners(dayId, exercises) {
       const semanaCompleta = allDays.every(d => d.completed);
 
       if (semanaCompleta) {
+        playCompletionSound();
         if (confirm('¡Semana completada! ¿Rellenar encuesta de fatiga?')) {
           const { openSurvey } = await import('./survey.js');
           openSurvey(dayInfo.weekly_program_id);
@@ -309,7 +313,7 @@ async function updateStressIndex(exerciseId, tipo) {
   const span = document.getElementById(`stress-${exerciseId}`);
   if (span) {
     span.textContent = total.toFixed(1);
-    span.style.color = total > 4 ? '#ff9800' : '#4caf50';
+    span.style.color = total > 4 ? '#ff9800' : '#30d158';
   }
 }
 
@@ -350,5 +354,25 @@ function playErrorSound() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
     osc.start();
     osc.stop(ctx.currentTime + 0.2);
+  } catch (e) { /* silencioso */ }
+}
+
+/**
+ * Efecto de sonido al completar la semana (doble tono ascendente)
+ */
+function playCompletionSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(660, ctx.currentTime);
+    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
   } catch (e) { /* silencioso */ }
 }
