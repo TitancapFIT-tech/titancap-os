@@ -1,6 +1,7 @@
 // =====================================================
-// TitanCap.OS - js/config.js (completo)
+// TitanCap.OS - js/config.js (v3 - Auditoría Completa)
 // Tablas científicas, constantes y catálogo de ejercicios
+// Extendido con DUP, WUP, MRV y deload individualizado
 // =====================================================
 
 // ------------------------------------------------------
@@ -111,6 +112,62 @@ export const PROGRESSION_SYSTEMS = {
 };
 
 // ------------------------------------------------------
+// DUP_CONFIG: Configuración de ondulación diaria
+// ------------------------------------------------------
+export const DUP_CONFIG = {
+    ciclo: ['fuerza', 'volumen', 'potencia'],
+    fuerza: {
+        intensidad: '80-90% 1RM',
+        reps: [4, 6],
+        rpe: [8, 9],
+        rir: [2, 1]
+    },
+    volumen: {
+        intensidad: '60-75% 1RM',
+        reps: [8, 12],
+        rpe: [6, 8],
+        rir: [4, 2]
+    },
+    potencia: {
+        intensidad: '50-60% 1RM',
+        reps: [3, 5],
+        rpe: [5, 6],
+        rir: [5, 4]
+    }
+};
+
+// ------------------------------------------------------
+// WUP_CONFIG: Configuración de ondulación semanal
+// ------------------------------------------------------
+export const WUP_CONFIG = {
+    ciclo: ['hipertrofia', 'fuerza', 'pico', 'descarga'],
+    hipertrofia: {
+        reps: [8, 12],
+        rpe: [7, 9],
+        rir: [3, 1],
+        volumen: 1.0
+    },
+    fuerza: {
+        reps: [4, 6],
+        rpe: [8, 9.5],
+        rir: [2, 0.5],
+        volumen: 0.8
+    },
+    pico: {
+        reps: [1, 3],
+        rpe: [9, 10],
+        rir: [1, 0],
+        volumen: 0.5
+    },
+    descarga: {
+        reps: [4, 6],
+        rpe: [5, 6],
+        rir: [5, 4],
+        volumen: 0.5
+    }
+};
+
+// ------------------------------------------------------
 // SPLIT_PATTERNS
 // ------------------------------------------------------
 export const SPLIT_PATTERNS = {
@@ -148,7 +205,14 @@ export const REP_RANGES = {
     basico_fuerza:       { min: 4, max: 8,  rpe: [6,9], rir: [4,1] },
     basico_hipertrofia:  { min: 6, max: 10, rpe: [6,9], rir: [4,1] },
     aislado_hipertrofia: { min: 8, max: 20, rpe: [7,10], rir: [3,0] },
-    alta_demanda_axial:  { min: 3, max: 6,  rpe: [6,8], rir: [4,2] }
+    alta_demanda_axial:  { min: 3, max: 6,  rpe: [6,8], rir: [4,2] },
+    dup_fuerza:          { min: 4, max: 6,  rpe: [8,9], rir: [2,1] },
+    dup_volumen:         { min: 8, max: 12, rpe: [6,8], rir: [4,2] },
+    dup_potencia:        { min: 3, max: 5,  rpe: [5,6], rir: [5,4] },
+    wup_hipertrofia:     { min: 8, max: 12, rpe: [7,9], rir: [3,1] },
+    wup_fuerza:          { min: 4, max: 6,  rpe: [8,9.5], rir: [2,0.5] },
+    wup_pico:            { min: 1, max: 3,  rpe: [9,10], rir: [1,0] },
+    wup_descarga:        { min: 4, max: 8,  rpe: [5,6], rir: [5,4] }
 };
 
 // ------------------------------------------------------
@@ -159,14 +223,16 @@ export const DELOAD_RULES = {
     intensityPercent: 0.70,
     durationDays: 7,
     maxDurationDays: 10,
+    caidaE1RMPorcentaje: 5, // % de caída en 2 semanas para activar deload
     triggers: [
-        'Rendimiento sostenido a la baja',
+        'Caída sostenida del e1RM > 5% en 2 semanas',
         'Dolor articular que aumenta',
-        'Sueño pobre varios días',
-        'Apatía marcada',
-        'Fatiga acumulada que no baja'
+        'Sueño promedio < 6 horas con estrés alto',
+        'Fatiga crónica reportada',
+        'Rendimiento percibido ≤ 4'
     ],
-    rules: 'Bajar volumen más que intensidad. No es parar, es descomprimir.'
+    rules: 'Bajar volumen más que intensidad. No es parar, es descomprimir.',
+    individualizado: 'Si solo cae un básico, hacer deload solo en ese ejercicio'
 };
 
 // ------------------------------------------------------
@@ -174,7 +240,7 @@ export const DELOAD_RULES = {
 // ------------------------------------------------------
 export const FATIGA_DECISION_RULES = {
     increase: {
-        conditions: ['Sueño bueno (>7h)', 'Dieta en superávit', 'Estrés bajo', 'e1RM sube'],
+        conditions: ['Sueño bueno (>7h)', 'Dieta en superávit', 'Estrés bajo (≤3)', 'e1RM sube', 'Rendimiento percibido ≥ 7'],
         action: 'Aumentar 1-2 series hacia MRV'
     },
     decrease: {
@@ -182,7 +248,7 @@ export const FATIGA_DECISION_RULES = {
         action: 'Reducir 2-3 series o cambiar ejercicio'
     },
     deload: {
-        conditions: ['Fatiga crónica sí'],
+        conditions: ['Fatiga crónica sí', 'Sueño < 6h con estrés ≥ 7', 'Rendimiento ≤ 4'],
         action: 'Programar semana de descarga (60% volumen, 70% intensidad)'
     }
 };
@@ -204,7 +270,12 @@ export const ADJUSTMENT_FACTORS = {
         alta: { umbral: 190, ajuste: -1 }
     },
     fuerza_absoluta: {
-        elite: { ajuste: -3 }
+        elite: { ajuste: -3 },
+        umbrales: {
+            sentadilla: 250,
+            press_banca: 140,
+            peso_muerto: 250
+        }
     },
     experiencia_avanzada: {
         anios: 12,
@@ -339,3 +410,21 @@ export const EXERCISES = [
     // GLÚTEOS
     { nombre: "Puente de glúteos", grupo_muscular: "gluteos", tipo: "mono_libre", es_basico: false, equipamiento: "barra" }
 ];
+
+// ------------------------------------------------------
+// MAPA DE BÁSICOS A GRUPOS PRINCIPALES
+// ------------------------------------------------------
+export const BASICO_GRUPO_MAP = {
+    sentadilla: 'cuadriceps',
+    press_banca: 'pecho',
+    peso_muerto: 'espalda'
+};
+
+// ------------------------------------------------------
+// INCREMENTOS DE PESO POR BÁSICO
+// ------------------------------------------------------
+export const PESO_INCREMENTOS = {
+    sentadilla: 5,
+    peso_muerto: 5,
+    press_banca: 2.5
+};
