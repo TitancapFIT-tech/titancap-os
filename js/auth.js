@@ -31,6 +31,12 @@ export function initPWA() {
         console.log('[PWA] Aplicación instalada exitosamente.');
         deferredPrompt = null;
     });
+
+    // Dentro de initPWA, después de los listeners existentes
+    window.addEventListener('triggerPWAInstall', (event) => {
+        const userName = event.detail?.userName || 'Atleta';
+        showInstallPrompt(userName);
+    });
 }
 
 // ------------------------------------------------------
@@ -108,7 +114,7 @@ function showInstallPrompt(userName) {
         try {
             await deferredPrompt.prompt();
             const { outcome } = await deferredPrompt.userChoice;
-            console.log(`[PWA] Resultado de instalación: ${outcome}`);
+            console.log(\`[PWA] Resultado de instalación: \${outcome}\`);
             deferredPrompt = null;
         } catch (err) {
             console.warn('[PWA] Error al mostrar prompt de instalación:', err);
@@ -190,7 +196,7 @@ export async function checkSession() {
 // ------------------------------------------------------
 export function renderAuthForm() {
     const container = document.getElementById('auth-container');
-    container.innerHTML = `
+    container.innerHTML = \`
         <div class="auth-box">
             <h1 class="titan-logo">TITANCAP<span>.</span>OS</h1>
             <p class="auth-subtitle">Accede a tu entrenamiento personalizado</p>
@@ -220,7 +226,7 @@ export function renderAuthForm() {
             <p id="auth-error" class="auth-error"></p>
             <p id="auth-success" class="auth-success"></p>
         </div>
-    `;
+    \`;
 
     let currentTab = 'login';
 
