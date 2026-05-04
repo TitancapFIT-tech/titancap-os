@@ -1,12 +1,14 @@
 // =====================================================
-// TitanCap.OS - js/profile.js (v3 - Auditoría Completa)
+// TitanCap.OS - js/profile.js (v3.2 – Onboarding premium)
 // Formulario de perfil con catálogo desde Supabase,
-// precarga de datos existentes y feedback mejorado
+// precarga de datos existentes y validación mejorada.
 // =====================================================
 
 import { supabase } from './supabase-client.js';
 import { generateFirstWeek } from './generator.js';
+import { showScreen } from './nav.js';
 
+// Mapeo de nombres de grupo para UI
 const grupoNames = {
   pecho: 'Pecho', espalda: 'Espalda', deltoides: 'Hombros',
   biceps: 'Bíceps', triceps: 'Tríceps', antebrazo: 'Antebrazos',
@@ -22,10 +24,16 @@ export async function renderProfileForm() {
   const formContainer = document.getElementById('profile-form');
   if (!formContainer) return;
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
+  // Mostrar mini-loader mientras se cargan los datos
+  formContainer.innerHTML = '<div class="spinner">Cargando configuración…</div>';
 
-  // Obtener perfil existente (si ya completo el onboarding antes)
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    formContainer.innerHTML = '<p style="color:red;">Sesión expirada. Recarga la página.</p>';
+    return;
+  }
+
+  // Obtener perfil existente (si ya completó el onboarding)
   const { data: perfilExistente } = await supabase
     .from('profiles')
     .select('*')
@@ -43,7 +51,7 @@ export async function renderProfileForm() {
     return;
   }
 
-  // Obtener equipamiento ya seleccionado por el usuario (si existe)
+  // Obtener equipamiento ya seleccionado
   const { data: equipamientoExistente } = await supabase
     .from('user_equipment')
     .select('exercise_id')
@@ -145,12 +153,15 @@ export async function renderProfileForm() {
       <div id="equipment-groups"></div>
     </div>
 
-    <button type="submit" class="btn-primary" style="margin-top: 20px;">
-      ${perfilExistente ? 'Actualizar perfil y regenerar' : 'Generar mi Primera Semana'}
-    </button>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary" id="btn-guardar-perfil">
+        <span id="btn-texto">${perfilExistente ? 'Actualizar perfil y regenerar' : 'Generar mi Primera Semana'}</span>
+        <span id="btn-loader" style="display:none;">⏳ Guardando…</span>
+      </button>
+    </div>
   `;
 
-  // Construir la sección de equipamiento (checkboxes)
+  // Construir dinámicamente la sección de equipamiento
   const eqContainer = document.getElementById('equipment-groups');
   for (const [grupo, ejerciciosGrupo] of Object.entries(grouped)) {
     const div = document.createElement('div');
@@ -161,7 +172,7 @@ export async function renderProfileForm() {
         ${ejerciciosGrupo.map(ex => {
           const checked = selectedIds.includes(ex.id) || ex.es_basico;
           return `
-            <label class="checkbox-item">
+            <label class="checkbox-item ${checked ? 'selected' : ''}">
               <input type="checkbox" name="equipamiento" value="${ex.id}" ${checked ? 'checked' : ''}>
               <span>${ex.nombre} <small>(${ex.equipamiento})</small></span>
             </label>
@@ -172,6 +183,13 @@ export async function renderProfileForm() {
     eqContainer.appendChild(div);
   }
 
+  // Efecto visual: al hacer clic en la etiqueta, se marca/desmarca
+  eqContainer.addEventListener('change', (e) => {
+    if (e.target.name === 'equipamiento') {
+      e.target.closest('.checkbox-item')?.classList.toggle('selected', e.target.checked);
+    }
+  });
+
   // Escuchar el envío del formulario
   formContainer.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -181,6 +199,7 @@ export async function renderProfileForm() {
 
 /**
  * Guarda el perfil y el equipamiento, y genera la primera semana.
+ * Muestra un loader mientras trabaja.
  */
 async function guardarPerfil() {
   const { data: { user } } = await supabase.auth.getUser();
@@ -189,7 +208,16 @@ async function guardarPerfil() {
     return;
   }
 
-  // Recoger valores
+  const btnTexto = document.getElementById('btn-texto');
+  const btnLoader = document.getElementById('btn-loader');
+  const btnGuardar = document.getElementById('btn-guardar-perfil');
+
+  // Deshabilitar botón y mostrar loader
+  btnGuardar.disabled = true;
+  btnTexto.style.display = 'none';
+  btnLoader.style.display = 'inline';
+
+  // Recoger valores del formulario
   const perfil = {
     id: user.id,
     email: user.email,
@@ -219,15 +247,21 @@ async function guardarPerfil() {
   if (perfilError) {
     console.error('Error al guardar perfil:', perfilError);
     alert('Error al guardar perfil: ' + perfilError.message);
+    btnGuardar.disabled = false;
+    btnTexto.style.display = 'inline';
+    btnLoader.style.display = 'none';
     return;
   }
 
-  // Recoger ejercicios seleccionados por ID
+  // Recoger ejercicios seleccionados
   const checkboxes = document.querySelectorAll('input[name="equipamiento"]:checked');
   const exerciseIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
 
   if (exerciseIds.length === 0) {
     alert('Selecciona al menos un ejercicio.');
+    btnGuardar.disabled = false;
+    btnTexto.style.display = 'inline';
+    btnLoader.style.display = 'none';
     return;
   }
 
@@ -244,16 +278,22 @@ async function guardarPerfil() {
   if (eqError) {
     console.error('Error al guardar equipamiento:', eqError);
     alert('Error al guardar el equipamiento: ' + eqError.message);
+    btnGuardar.disabled = false;
+    btnTexto.style.display = 'inline';
+    btnLoader.style.display = 'none';
     return;
   }
 
-  // Generar primera semana (o regenerar si ya existía)
+  // Generar primera semana
   try {
     await generateFirstWeek(user.id);
-    const { showScreen } = await import('./nav.js');
+    // Ir al dashboard (donde se mostrará la instalación PWA si corresponde)
     showScreen('dashboard-screen');
   } catch (err) {
     console.error('Error al generar rutina:', err);
     alert('Error al generar la primera semana: ' + err.message);
+    btnGuardar.disabled = false;
+    btnTexto.style.display = 'inline';
+    btnLoader.style.display = 'none';
   }
 }
