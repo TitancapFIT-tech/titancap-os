@@ -3,7 +3,7 @@
 // Autenticación + verificación de pago + PWA install
 // =====================================================
 
-import { supabase } from './supabase-client.js';
+import { supabase, checkPaymentStatus } from './supabase-client.js';
 
 // ------------------------------------------------------
 // Variables a nivel de módulo para PWA
@@ -31,33 +31,6 @@ export function initPWA() {
         console.log('[PWA] Aplicación instalada exitosamente.');
         deferredPrompt = null;
     });
-}
-
-// ------------------------------------------------------
-// NUEVO: Verificar estado del pago en Supabase
-// Retorna true si existe un pago aprobado para este email
-// ------------------------------------------------------
-async function checkPaymentStatus(email) {
-    try {
-        const { data, error } = await supabase
-            .from('payments')
-            .select('status')
-            .eq('email', email)
-            .eq('status', 'approved')
-            .maybeSingle();
-
-        if (error) {
-            console.warn('[Pago] No se pudo verificar estado del pago:', error.message);
-            return false;
-        }
-
-        const pagado = !!data;
-        console.log(`[Pago] Estado para ${email}:`, pagado ? 'APROBADO' : 'pendiente/no encontrado');
-        return pagado;
-    } catch (err) {
-        console.error('[Pago] Error inesperado al verificar pago:', err);
-        return false; // No bloquear el login si falla la verificación
-    }
 }
 
 // ------------------------------------------------------
@@ -146,7 +119,7 @@ function showInstallPrompt(userName) {
 }
 
 // ------------------------------------------------------
-// NUEVO: Flujo post-login
+// Flujo post-login
 // Verifica pago, obtiene perfil y dispara instalación PWA
 // ------------------------------------------------------
 async function handlePostLogin(user) {
