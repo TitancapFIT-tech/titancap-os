@@ -35,7 +35,9 @@ export function initPWA() {
     // Dentro de initPWA, después de los listeners existentes
     window.addEventListener('triggerPWAInstall', (event) => {
         const userName = event.detail?.userName || 'Atleta';
-        showInstallPrompt(userName);
+        setTimeout(() => {
+            showInstallPrompt(userName);
+        }, 2000);
     });
 }
 
@@ -44,15 +46,9 @@ export function initPWA() {
 // Muestra un modal premium con el nombre del usuario
 // ------------------------------------------------------
 function showInstallPrompt(userName) {
-    // Si no hay deferredPrompt, el navegador no soporta instalación
-    if (!deferredPrompt) {
-        console.log('[PWA] Instalación no disponible (navegador no compatible o ya instalada).');
-        return;
-    }
-
     const nombre = userName || 'Atleta';
 
-    // Crear modal de instalación
+    // Crear modal de instalación (siempre visible)
     const overlay = document.createElement('div');
     overlay.className = 'pwa-install-overlay';
     overlay.innerHTML = `
@@ -81,7 +77,7 @@ function showInstallPrompt(userName) {
 
     document.body.appendChild(overlay);
 
-    // Sonido sutil al aparecer (Web Audio API - tono profesional)
+    // Sonido sutil al aparecer
     try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = audioCtx.createOscillator();
@@ -89,16 +85,14 @@ function showInstallPrompt(userName) {
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // La4
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
         gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-        osc.start(audioCtx.currentTime);
+        osc.start();
         osc.stop(audioCtx.currentTime + 0.3);
-    } catch (e) {
-        // Silencioso si el navegador bloquea audio
-    }
+    } catch (e) {}
 
-    // Animación de entrada (CSS agrega clase después de un frame)
+    // Animación de entrada
     requestAnimationFrame(() => {
         overlay.classList.add('active');
     });
@@ -111,16 +105,22 @@ function showInstallPrompt(userName) {
 
     // Instalar al hacer clic en "Instalar ahora"
     document.getElementById('pwa-install-now').addEventListener('click', async () => {
-        try {
-            await deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
-            console.log(\`[PWA] Resultado de instalación: \${outcome}\`);
-            deferredPrompt = null;
-        } catch (err) {
-            console.warn('[PWA] Error al mostrar prompt de instalación:', err);
+        if (deferredPrompt) {
+            // Android / Chrome con soporte de instalación nativa
+            try {
+                await deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`[PWA] Resultado de instalación: ${outcome}`);
+                deferredPrompt = null;
+            } catch (err) {
+                console.warn('[PWA] Error al mostrar prompt:', err);
+            }
+            overlay.classList.remove('active');
+            setTimeout(() => overlay.remove(), 300);
+        } else {
+            // Fallback para iOS o navegadores sin evento
+            alert('Para instalar: usa el menú del navegador → "Añadir a pantalla de inicio".');
         }
-        overlay.classList.remove('active');
-        setTimeout(() => overlay.remove(), 300);
     });
 }
 
@@ -196,7 +196,7 @@ export async function checkSession() {
 // ------------------------------------------------------
 export function renderAuthForm() {
     const container = document.getElementById('auth-container');
-    container.innerHTML = \`
+    container.innerHTML = `
         <div class="auth-box">
             <h1 class="titan-logo">TITANCAP<span>.</span>OS</h1>
             <p class="auth-subtitle">Accede a tu entrenamiento personalizado</p>
@@ -226,7 +226,7 @@ export function renderAuthForm() {
             <p id="auth-error" class="auth-error"></p>
             <p id="auth-success" class="auth-success"></p>
         </div>
-    \`;
+    `;
 
     let currentTab = 'login';
 
