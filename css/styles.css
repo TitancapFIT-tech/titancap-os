@@ -1,5 +1,5 @@
 /* =====================================================
-   TitanCap.OS - styles.css (v4 - Premium Rediseñado)
+   TitanCap.OS - styles.css (v5 – Premium Rediseñado)
    Estética sobria, minimalista y premium.
    Paleta: blanco, negro, gris con efectos glass.
    Animaciones fluidas y tipografía de fuerza.
@@ -146,6 +146,13 @@ body {
     50.01% { transform-origin: right; }
     100% { transform: scaleX(0); transform-origin: right; }
 }
+#loading-message {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-top: 16px;
+    font-weight: 400;
+    letter-spacing: 0.3px;
+}
 
 /* ---------- Top Bar ---------- */
 .top-bar {
@@ -226,6 +233,42 @@ body {
 }
 .auth-error:not(:empty) {
     display: block;
+}
+.auth-success {
+    color: var(--success);
+    font-size: 0.85rem;
+    margin-top: 12px;
+    text-align: center;
+    padding: 10px;
+    background: var(--success-bg);
+    border-radius: var(--radius-sm);
+    display: none;
+}
+.auth-success:not(:empty) {
+    display: block;
+}
+
+/* ---------- Loader / Spinner (auth & profile) ---------- */
+.auth-loader, .spinner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+.spinner::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-top: 2px solid var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: inline-block;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
 /* ---------- Formularios ---------- */
@@ -337,7 +380,8 @@ select {
     border: 1px solid var(--border);
     box-shadow: var(--shadow-card-active);
 }
-.checkbox-item:has(input:checked) {
+.checkbox-item:has(input:checked),
+.checkbox-item.selected {
     border-color: var(--success);
     color: var(--text-primary);
     background: var(--success-bg);
@@ -461,6 +505,29 @@ select {
 }
 
 /* ---------- Dashboard ---------- */
+#payment-banner {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    font-size: 0.85rem;
+    color: var(--warn);
+    margin-bottom: 16px;
+    text-align: center;
+}
+.payment-link {
+    color: var(--warn);
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+#progression-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    display: block;
+}
+
 .days-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -554,6 +621,31 @@ select {
     50% { transform: translateY(-4px); }
 }
 
+/* ---------- Skeleton Loader (Dashboard) ---------- */
+.skeleton-loader {
+    margin-bottom: 16px;
+}
+.skeleton-header,
+.skeleton-card {
+    background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.03) 75%);
+    background-size: 200% 100%;
+    animation: skeletonPulse 1.5s ease-in-out infinite;
+    border-radius: var(--radius-md);
+}
+.skeleton-header {
+    height: 24px;
+    width: 60%;
+    margin-bottom: 16px;
+}
+.skeleton-card {
+    height: 80px;
+    margin-bottom: 12px;
+}
+@keyframes skeletonPulse {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
 /* ---------- Workout Day ---------- */
 .exercises-list {
     display: flex;
@@ -569,10 +661,10 @@ select {
     padding: 20px;
     border: 1px solid var(--border);
     transition: all var(--transition-smooth);
-    animation: cardPop 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: cardPopWorkout 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: var(--shadow-card);
 }
-@keyframes cardPop {
+@keyframes cardPopWorkout {
     0% {
         opacity: 0;
         transform: scale(0.92);
@@ -731,7 +823,98 @@ select {
     font-size: 0.9rem;
 }
 
-/* ---------- Modal de Instalación PWA ---------- */
+/* ---------- Modal de Instalación PWA (Premium desde auth.js) ---------- */
+.pwa-install-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+}
+.pwa-install-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+.pwa-install-card {
+    background: rgba(20, 20, 20, 0.95);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-xl);
+    padding: 32px 24px;
+    width: 85%;
+    max-width: 380px;
+    text-align: center;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.9);
+    transform: translateY(20px);
+    transition: transform 0.35s ease;
+}
+.pwa-install-overlay.active .pwa-install-card {
+    transform: translateY(0);
+}
+.pwa-install-icon {
+    margin-bottom: 16px;
+}
+.pwa-install-title {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+.pwa-install-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 24px;
+}
+.pwa-install-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.pwa-install-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: linear-gradient(135deg, #ffffff 0%, #e0e0e0 100%);
+    color: #000;
+    border: none;
+    padding: 16px;
+    border-radius: var(--radius-md);
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
+    letter-spacing: 0.3px;
+}
+.pwa-install-btn:hover {
+    box-shadow: 0 10px 25px rgba(255, 255, 255, 0.4);
+    transform: scale(1.01);
+}
+.pwa-install-skip {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+.pwa-install-skip:hover {
+    color: var(--text-secondary);
+}
+
+/* ---------- Modal antiguo (compatibilidad) ---------- */
 .install-modal-glass {
     position: fixed;
     bottom: 20px;
