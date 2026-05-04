@@ -1,5 +1,5 @@
 // =====================================================
-// TitanCap.OS - js/config.js (v3.1 - Auditoría Completa)
+// TitanCap.OS - js/config.js (v3.2 - Auditoría final)
 // Tablas científicas, constantes y catálogo completo
 // =====================================================
 
@@ -75,6 +75,8 @@ export const BASELINE_HYPERTROPHY = {
 
 // ------------------------------------------------------
 // STRESS_INDEX_COEFFICIENTS
+// Fórmula: SI = intercept + slope * RIR
+// Redondeo final: ≥0.5 arriba, <0.5 abajo (según documento)
 // ------------------------------------------------------
 export const STRESS_INDEX_COEFFICIENTS = {
     multi_libre:    { intercept: 1.4, slope: -0.2 },
@@ -84,7 +86,7 @@ export const STRESS_INDEX_COEFFICIENTS = {
 };
 
 // ------------------------------------------------------
-// PROGRESSION_SYSTEMS
+// PROGRESSION_SYSTEMS (lógica de negocio avanzada)
 // ------------------------------------------------------
 export const PROGRESSION_SYSTEMS = {
     principiante: {
@@ -102,12 +104,23 @@ export const PROGRESSION_SYSTEMS = {
         exitTo: 'triple'
     },
     avanzado: {
-        system: 'triple_ondulante',
+        system: 'triple_ondulante',  // genérico: puede ser triple, dup o wup
         description: 'Triple progresión / DUP / WUP',
         mechanism: 'Reps → Series → Peso, u ondulación diaria/semanal',
         stallRule: 'Estancamiento en dos mesociclos consecutivos',
         exitTo: 'descarga_prolongada'
     }
+};
+
+// ------------------------------------------------------
+// PROGRESSION_DB_MAP: valores exactos aceptados por la DB
+// ------------------------------------------------------
+export const PROGRESSION_DB_VALUES = {
+    lineal: 'lineal',
+    doble: 'doble',
+    triple: 'triple',
+    dup: 'dup',
+    wup: 'wup'
 };
 
 // ------------------------------------------------------
@@ -159,7 +172,7 @@ export const WUP_CONFIG = {
         volumen: 0.5
     },
     descarga: {
-        reps: [4, 6],
+        reps: [4, 8],
         rpe: [5, 6],
         rir: [5, 4],
         volumen: 0.5
@@ -215,7 +228,7 @@ export const REP_RANGES = {
 };
 
 // ------------------------------------------------------
-// DELOAD_RULES
+// DELOAD_RULES (actualizado con trigger de Stress Index)
 // ------------------------------------------------------
 export const DELOAD_RULES = {
     volumePercent: 0.60,
@@ -228,14 +241,15 @@ export const DELOAD_RULES = {
         'Dolor articular que aumenta',
         'Sueño promedio < 6 horas con estrés alto',
         'Fatiga crónica reportada',
-        'Rendimiento percibido ≤ 4'
+        'Rendimiento percibido ≤ 4',
+        'Stress Index semanal sube y e1RM baja simultáneamente (Trigger C)'
     ],
     rules: 'Bajar volumen más que intensidad. No es parar, es descomprimir.',
     individualizado: 'Si solo cae un básico, hacer deload solo en ese ejercicio'
 };
 
 // ------------------------------------------------------
-// FATIGA_DECISION_RULES
+// FATIGA_DECISION_RULES (incluye regla de Stress Index)
 // ------------------------------------------------------
 export const FATIGA_DECISION_RULES = {
     increase: {
@@ -247,13 +261,18 @@ export const FATIGA_DECISION_RULES = {
         action: 'Reducir 2-3 series o cambiar ejercicio'
     },
     deload: {
-        conditions: ['Fatiga crónica sí', 'Sueño < 6h con estrés ≥ 7', 'Rendimiento ≤ 4'],
+        conditions: [
+            'Fatiga crónica sí',
+            'Sueño < 6h con estrés ≥ 7',
+            'Rendimiento ≤ 4',
+            'Stress Index sube y e1RM baja (confirmado por métricas)'
+        ],
         action: 'Programar semana de descarga (60% volumen, 70% intensidad)'
     }
 };
 
 // ------------------------------------------------------
-// ADJUSTMENT_FACTORS
+// ADJUSTMENT_FACTORS (Chad Wesley Smith)
 // ------------------------------------------------------
 export const ADJUSTMENT_FACTORS = {
     genero: {
@@ -420,7 +439,7 @@ export const BASICO_GRUPO_MAP = {
 };
 
 // ------------------------------------------------------
-// INCREMENTOS DE PESO POR BÁSICO
+// INCREMENTOS DE PESO POR BÁSICO (kg)
 // ------------------------------------------------------
 export const PESO_INCREMENTOS = {
     sentadilla: 5,
