@@ -1,5 +1,5 @@
 // =====================================================
-// TitanCap.OS - js/dashboard.js (v2 - Frases + Refresco)
+// TitanCap.OS - js/dashboard.js (v3 - PWA + Frases + Refresco)
 // =====================================================
 
 import { supabase } from './supabase-client.js';
@@ -7,12 +7,14 @@ import { showScreen, navigateToDay, showSurvey, logout } from './nav.js';
 
 let currentWeekId = null;
 let currentWeekNumber = null;
+let deferredPrompt = null;
 
 /**
  * Renderiza el dashboard principal:
  * - Saludo personalizado
  * - Frase motivacional aleatoria
  * - Días de entrenamiento de la semana activa
+ * - Botón de instalación PWA
  */
 export async function renderDashboard() {
   const { data: { user } } = await supabase.auth.getUser();
@@ -106,6 +108,9 @@ export async function renderDashboard() {
   // Botón de cerrar sesión
   const logoutBtn = document.getElementById('btn-logout');
   if (logoutBtn) logoutBtn.onclick = () => logout();
+
+  // Inicializar PWA install (solo si no está ya instalada)
+  initPWAInstall();
 }
 
 /**
@@ -138,4 +143,75 @@ async function cargarFraseMotivacional() {
     fraseEl.textContent = '"La disciplina es el puente entre las metas y los logros." — Jim Rohn';
     fraseEl.style.display = 'block';
   }
+}
+
+// =====================================================
+// PWA: INSTALACIÓN NATIVA
+// =====================================================
+
+/**
+ * Inicializa el listener para el evento beforeinstallprompt
+ * y muestra el modal de instalación si corresponde.
+ */
+function initPWAInstall() {
+  // Verificar si ya está instalada como PWA
+  if (window.matchMedia('(display-mode: standalone)').matches) {
+    console.log('App ya instalada como PWA');
+    return;
+  }
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevenir que el navegador muestre el diálogo automático
+    e.preventDefault();
+    // Guardar el evento para usarlo después
+    deferredPrompt = e;
+
+    // Mostrar modal de instalación después de 3 segundos
+    setTimeout(() => {
+      if (document.getElementById('dashboard-screen').classList.contains('active')) {
+        mostrarModalInstalacion();
+      }
+    }, 3000);
+  });
+
+  // Detectar cuando la app fue instalada
+  window.addEventListener('appinstalled', () => {
+    console.log('TitanCap.OS instalada exitosamente');
+    deferredPrompt = null;
+    // Eliminar modal si existe
+    const modal = document.querySelector('.install-modal-glass');
+    if (modal) modal.remove();
+  });
+}
+
+/**
+ * Muestra un modal elegante para invitar a instalar la PWA.
+ */
+function mostrarModalInstalacion() {
+  // Verificar que no exista ya el modal
+  if (document.querySelector('.install-modal-glass')) return;
+
+  const modal = document.createElement('div');
+  modal.className = 'install-modal-glass';
+  modal.innerHTML = `
+    <h3>⚡ Instalar TitanCap.OS</h3>
+    <p>Accede a tu entrenamiento sin abrir el navegador. Como una app nativa, rápida y siempre disponible.</p>
+    <button class="btn-primary" id="btn-install">Instalar Ahora</button>
+    <button class="btn-text" id="btn-dismiss">Quizás después</button>
+  `;
+  document.body.appendChild(modal);
+
+  document.getElementById('btn-install').addEventListener('click', async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`PWA instalación: ${outcome}`);
+      deferredPrompt = null;
+    }
+    modal.remove();
+  });
+
+  document.getElementById('btn-dismiss').addEventListener('click', () => {
+    modal.remove();
+  });
 }
