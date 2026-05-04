@@ -7,10 +7,12 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="TitanCap">
+    <meta name="apple-mobile-web-app-title" content="TitanCap.OS">
     <meta name="description" content="Entrenamiento de fuerza automatizado basado en ciencia">
     <link rel="manifest" href="/manifest.json">
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
@@ -19,40 +21,58 @@
 </head>
 <body>
     <div id="app">
-        <!-- Pantalla de carga -->
+        <!-- PANTALLA DE CARGA (Tarea 4: mensaje dinámico “pensando…”) -->
         <div id="loading-screen" class="screen active">
             <div class="logo-animation">
                 <div class="titan-logo">TITANCAP<span>.</span>OS</div>
                 <div class="loader-bar"></div>
+                <p id="loading-message" style="margin-top:16px;color:#aaa;font-size:0.9rem;"></p>
             </div>
         </div>
 
-        <!-- Pantalla de autenticación -->
+        <!-- PANTALLA DE AUTENTICACIÓN -->
         <div id="auth-screen" class="screen">
             <div id="auth-container"></div>
         </div>
 
-        <!-- Pantalla de perfil (onboarding) -->
+        <!-- PANTALLA DE PERFIL (ONBOARDING) -->
         <div id="profile-screen" class="screen">
-            <form id="profile-form"></form>
+            <form id="profile-form" class="profile-form-container"></form>
         </div>
 
-        <!-- Dashboard -->
+        <!-- DASHBOARD -->
         <div id="dashboard-screen" class="screen">
             <div class="top-bar">
                 <h2>🏋️ TitanCap.OS</h2>
                 <button id="btn-logout" class="btn-back">Salir</button>
             </div>
-            <div id="saludo-personalizado" style="font-size:1.1rem;margin-bottom:12px;"></div>
+
+            <!-- Banner de pago pendiente (Tarea 5) – oculto por defecto -->
+            <div id="payment-banner" style="display:none;"></div>
+
+            <div id="saludo-personalizado" style="font-size:1.1rem;margin-bottom:4px;"></div>
+            <div id="progression-label" style="font-size:0.85rem;color:#aaa;margin-bottom:12px;"></div>
             <div id="frase-motivacional" style="display:none;"></div>
-            <div id="week-days-container" class="days-grid"></div>
-            <div class="action-buttons">
-                <button id="btn-completar-semana" class="btn-primary">⏳ Semana en progreso</button>
+
+            <!-- Skeleton Loader (Tarea 4) – se muestra antes de cargar datos -->
+            <div id="skeleton-loader" class="skeleton-loader" style="display:none;">
+                <div class="skeleton-header"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
             </div>
-            <button id="btn-reiniciar" class="btn-icon outline" style="margin-top:16px;">Reiniciar Semana</button>
+
+            <!-- Contenido real del dashboard (se oculta durante el skeleton) -->
+            <div id="dashboard-content">
+                <div id="week-days-container" class="days-grid"></div>
+                <div class="action-buttons">
+                    <button id="btn-completar-semana" class="btn-primary">⏳ Semana en progreso</button>
+                </div>
+                <button id="btn-reiniciar" class="btn-icon outline" style="margin-top:16px;">Reiniciar Semana</button>
+            </div>
         </div>
 
-        <!-- Pantalla de entrenamiento del día -->
+        <!-- PANTALLA DE ENTRENAMIENTO DEL DÍA -->
         <div id="workout-screen" class="screen">
             <div class="top-bar">
                 <button id="btn-back" class="btn-back">← Volver</button>
@@ -63,7 +83,7 @@
         </div>
     </div>
 
-    <!-- Modal de encuesta de fatiga -->
+    <!-- MODAL DE ENCUESTA DE FATIGA -->
     <div id="survey-modal" class="modal">
         <div class="modal-content">
             <form id="survey-form"></form>
@@ -72,16 +92,18 @@
 
     <script type="module">
         import { initApp } from './js/nav.js';
-        // Registrar Service Worker
+
+        // Registrar Service Worker (PWA – Tarea 2)
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js')
-                    .then(reg => console.log('SW registrado:', reg.scope))
-                    .catch(err => console.warn('SW no registrado:', err));
+                    .then(reg => console.log('[PWA] SW registrado:', reg.scope))
+                    .catch(err => console.warn('[PWA] SW no registrado:', err));
             });
         }
-        // Iniciar la aplicación inmediatamente
-        console.log('Iniciando TitanCap.OS...');
+
+        // Arrancar la aplicación
+        console.log('[TitanCap.OS] Iniciando…');
         initApp();
     </script>
 </body>
