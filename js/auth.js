@@ -110,7 +110,7 @@ function showInstallPrompt(userName) {
             try {
                 await deferredPrompt.prompt();
                 const { outcome } = await deferredPrompt.userChoice;
-                console.log(`[PWA] Resultado de instalación: ${outcome}`);
+                console.log(\`[PWA] Resultado de instalación: \${outcome}\`);
                 deferredPrompt = null;
             } catch (err) {
                 console.warn('[PWA] Error al mostrar prompt:', err);
@@ -160,7 +160,7 @@ async function handlePostLogin(user) {
 
 // ------------------------------------------------------
 // EXISTENTE (mejorado): Verifica sesión activa
-// Ahora también devuelve el estado del pago
+// Modificado para manejar fallos de pago sin bloquear la sesión
 // ------------------------------------------------------
 export async function checkSession() {
     const { data: { session }, error } = await supabase.auth.getSession();
@@ -178,8 +178,14 @@ export async function checkSession() {
             .eq('id', session.user.id)
             .single();
 
-        // Verificar estado del pago
-        const pagoAprobado = await checkPaymentStatus(session.user.email);
+        // Intentar verificar pago, pero si falla asumir que no pagó
+        let pagoAprobado = false;
+        try {
+            pagoAprobado = await checkPaymentStatus(session.user.email);
+        } catch (payError) {
+            console.warn('Error verificando pago, se asume acceso limitado:', payError);
+            pagoAprobado = false;
+        }
 
         return {
             user: session.user,
