@@ -1,10 +1,11 @@
 // =====================================================
-// TitanCap.OS - js/profile.js (VERSIÓN FINAL – CON UPSERT)
+// TitanCap.OS - js/profile.js (v3 - Auditoría Completa)
+// Formulario de perfil con catálogo desde Supabase,
+// precarga de datos existentes y feedback mejorado
 // =====================================================
 
 import { supabase } from './supabase-client.js';
 import { generateFirstWeek } from './generator.js';
-import { EXERCISES } from './config.js';
 
 const grupoNames = {
   pecho: 'Pecho', espalda: 'Espalda', deltoides: 'Hombros',
@@ -13,35 +14,71 @@ const grupoNames = {
   pantorrilla: 'Gemelos', abdomen: 'Abdomen'
 };
 
+/**
+ * Renderiza el formulario de perfil, cargando ejercicios desde Supabase
+ * y precargando los datos si el perfil ya existe.
+ */
 export async function renderProfileForm() {
-  const formContainer = document.getElementById('profile-form'); // es un <form>
+  const formContainer = document.getElementById('profile-form');
   if (!formContainer) return;
 
-  // Catálogo local para la interfaz
-  const exercises = EXERCISES.map((ex, idx) => ({ ...ex, localId: idx + 1 }));
-  console.log('Ejercicios cargados desde catálogo local:', exercises.length);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
 
+  // Obtener perfil existente (si ya completo el onboarding antes)
+  const { data: perfilExistente } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single();
+
+  // Obtener ejercicios desde Supabase
+  const { data: exercises, error: exError } = await supabase
+    .from('exercises')
+    .select('*')
+    .order('grupo_muscular');
+
+  if (exError || !exercises || exercises.length === 0) {
+    formContainer.innerHTML = '<p style="color:red;">Error al cargar ejercicios. Recarga la página.</p>';
+    return;
+  }
+
+  // Obtener equipamiento ya seleccionado por el usuario (si existe)
+  const { data: equipamientoExistente } = await supabase
+    .from('user_equipment')
+    .select('exercise_id')
+    .eq('user_id', user.id);
+
+  const selectedIds = (equipamientoExistente || []).map(e => e.exercise_id);
+
+  // Agrupar ejercicios por grupo muscular
   const grouped = {};
   exercises.forEach(ex => {
     if (!grouped[ex.grupo_muscular]) grouped[ex.grupo_muscular] = [];
     grouped[ex.grupo_muscular].push(ex);
   });
 
-  // Construir el interior del formulario (sin <form> anidado)
+  // Prellenar valores del perfil
+  const p = perfilExistente || {};
+
+  // Construir el formulario
   formContainer.innerHTML = `
     <h2 style="margin-bottom: 20px;">🔧 Configuración de tu perfil</h2>
 
     <div class="section">
       <h3>Datos básicos</h3>
-      <div class="input-group"><label>Nombre</label><input type="text" id="nombre" required></div>
+      <div class="input-group"><label>Nombre</label><input type="text" id="nombre" value="${p.nombre || ''}" required></div>
       <div class="input-row">
-        <div class="input-group"><label>Edad</label><input type="number" id="edad" min="14" max="80" required></div>
-        <div class="input-group"><label>Peso (kg)</label><input type="number" id="peso" step="0.1" required></div>
-        <div class="input-group"><label>Estatura (cm)</label><input type="number" id="estatura" required></div>
+        <div class="input-group"><label>Edad</label><input type="number" id="edad" min="14" max="80" value="${p.edad || ''}" required></div>
+        <div class="input-group"><label>Peso (kg)</label><input type="number" id="peso" step="0.1" value="${p.peso_kg || ''}" required></div>
+        <div class="input-group"><label>Estatura (cm)</label><input type="number" id="estatura" value="${p.estatura_cm || ''}" required></div>
       </div>
       <div class="input-group">
         <label>Género</label>
-        <select id="genero"><option value="masculino">Masculino</option><option value="femenino">Femenino</option></select>
+        <select id="genero">
+          <option value="masculino" ${p.genero === 'masculino' ? 'selected' : ''}>Masculino</option>
+          <option value="femenino" ${p.genero === 'femenino' ? 'selected' : ''}>Femenino</option>
+        </select>
       </div>
     </div>
 
@@ -50,32 +87,32 @@ export async function renderProfileForm() {
       <div class="input-group">
         <label>Experiencia en gimnasio</label>
         <select id="experiencia">
-          <option value="1">Menos de 6 meses</option>
-          <option value="6">6 meses - 1 año</option>
-          <option value="12" selected>1 - 2 años</option>
-          <option value="24">2 - 4 años</option>
-          <option value="48">Más de 4 años</option>
+          <option value="1" ${p.experiencia_entrenamiento_meses == 1 ? 'selected' : ''}>Menos de 6 meses</option>
+          <option value="6" ${p.experiencia_entrenamiento_meses == 6 ? 'selected' : ''}>6 meses - 1 año</option>
+          <option value="12" ${p.experiencia_entrenamiento_meses == 12 ? 'selected' : ''}>1 - 2 años</option>
+          <option value="24" ${p.experiencia_entrenamiento_meses == 24 ? 'selected' : ''}>2 - 4 años</option>
+          <option value="48" ${p.experiencia_entrenamiento_meses == 48 ? 'selected' : ''}>Más de 4 años</option>
         </select>
       </div>
       <div class="input-group">
         <label>Dieta actual</label>
         <select id="dieta">
-          <option value="deficit">Déficit calórico</option>
-          <option value="mantenimiento" selected>Mantenimiento</option>
-          <option value="superavit">Superávit calórico</option>
+          <option value="deficit" ${p.dieta === 'deficit' ? 'selected' : ''}>Déficit calórico</option>
+          <option value="mantenimiento" ${(!p.dieta || p.dieta === 'mantenimiento') ? 'selected' : ''}>Mantenimiento</option>
+          <option value="superavit" ${p.dieta === 'superavit' ? 'selected' : ''}>Superávit calórico</option>
         </select>
       </div>
       <div class="input-group">
-        <label>Horas de sueño promedio</label><input type="number" id="horas_sueno" min="4" max="12" step="0.5" value="7">
+        <label>Horas de sueño promedio</label><input type="number" id="horas_sueno" min="4" max="12" step="0.5" value="${p.horas_sueno_promedio || '7'}">
       </div>
     </div>
 
     <div class="section">
       <h3>1RM en ejercicios básicos (kg)</h3>
       <div class="input-row">
-        <div class="input-group"><label>Sentadilla</label><input type="number" id="rm_sentadilla" step="0.5" placeholder="0"></div>
-        <div class="input-group"><label>Press Banca</label><input type="number" id="rm_banca" step="0.5" placeholder="0"></div>
-        <div class="input-group"><label>Peso Muerto</label><input type="number" id="rm_peso_muerto" step="0.5" placeholder="0"></div>
+        <div class="input-group"><label>Sentadilla</label><input type="number" id="rm_sentadilla" step="0.5" placeholder="0" value="${p.rm_sentadilla || ''}"></div>
+        <div class="input-group"><label>Press Banca</label><input type="number" id="rm_banca" step="0.5" placeholder="0" value="${p.rm_banca || ''}"></div>
+        <div class="input-group"><label>Peso Muerto</label><input type="number" id="rm_peso_muerto" step="0.5" placeholder="0" value="${p.rm_peso_muerto || ''}"></div>
       </div>
     </div>
 
@@ -84,20 +121,20 @@ export async function renderProfileForm() {
       <div class="input-group">
         <label>Objetivo principal</label>
         <select id="objetivo">
-          <option value="hipertrofia">Ganar masa muscular</option>
-          <option value="fuerza">Fuerza máxima en básicos</option>
-          <option value="mixto" selected>Mixto (fuerza + hipertrofia)</option>
+          <option value="hipertrofia" ${p.objetivo === 'hipertrofia' ? 'selected' : ''}>Ganar masa muscular</option>
+          <option value="fuerza" ${p.objetivo === 'fuerza' ? 'selected' : ''}>Fuerza máxima en básicos</option>
+          <option value="mixto" ${(!p.objetivo || p.objetivo === 'mixto') ? 'selected' : ''}>Mixto (fuerza + hipertrofia)</option>
         </select>
       </div>
       <div class="input-row">
-        <div class="input-group"><label>Días/semana</label><input type="number" id="dias_disponibles" min="2" max="6" value="4"></div>
-        <div class="input-group"><label>Minutos/sesión</label><input type="number" id="tiempo_sesion" min="30" max="120" value="60"></div>
+        <div class="input-group"><label>Días/semana</label><input type="number" id="dias_disponibles" min="2" max="6" value="${p.dias_disponibles || '4'}"></div>
+        <div class="input-group"><label>Minutos/sesión</label><input type="number" id="tiempo_sesion" min="30" max="120" value="${p.tiempo_por_sesion_min || '60'}"></div>
       </div>
       <div class="input-group">
         <label>Preferencia de esfuerzo</label>
         <select id="preferencia_fallo">
-          <option value="siempre_fallo">Siempre al fallo</option>
-          <option value="rir_1_3" selected>Dejo 1-3 repeticiones en reserva</option>
+          <option value="siempre_fallo" ${p.preferencia_fallo === 'siempre_fallo' ? 'selected' : ''}>Siempre al fallo</option>
+          <option value="rir_1_3" ${(!p.preferencia_fallo || p.preferencia_fallo === 'rir_1_3') ? 'selected' : ''}>Dejo 1-3 repeticiones en reserva</option>
         </select>
       </div>
     </div>
@@ -108,35 +145,43 @@ export async function renderProfileForm() {
       <div id="equipment-groups"></div>
     </div>
 
-    <button type="submit" class="btn-primary" style="margin-top: 20px;">Generar mi Primera Semana</button>
+    <button type="submit" class="btn-primary" style="margin-top: 20px;">
+      ${perfilExistente ? 'Actualizar perfil y regenerar' : 'Generar mi Primera Semana'}
+    </button>
   `;
 
   // Construir la sección de equipamiento (checkboxes)
   const eqContainer = document.getElementById('equipment-groups');
-  for (const [grupo, ejercicios] of Object.entries(grouped)) {
+  for (const [grupo, ejerciciosGrupo] of Object.entries(grouped)) {
     const div = document.createElement('div');
     div.className = 'equipment-group';
     div.innerHTML = `
       <h4>${grupoNames[grupo] || grupo}</h4>
       <div class="checkbox-grid">
-        ${ejercicios.map(ex => `
-          <label class="checkbox-item">
-            <input type="checkbox" name="equipamiento" value="${ex.nombre}" ${ex.es_basico ? 'checked' : ''}>
-            <span>${ex.nombre} <small>(${ex.equipamiento})</small></span>
-          </label>
-        `).join('')}
+        ${ejerciciosGrupo.map(ex => {
+          const checked = selectedIds.includes(ex.id) || ex.es_basico;
+          return `
+            <label class="checkbox-item">
+              <input type="checkbox" name="equipamiento" value="${ex.id}" ${checked ? 'checked' : ''}>
+              <span>${ex.nombre} <small>(${ex.equipamiento})</small></span>
+            </label>
+          `;
+        }).join('')}
       </div>
     `;
     eqContainer.appendChild(div);
   }
 
-  // Escuchar el envío del formulario principal (sin anidamiento)
+  // Escuchar el envío del formulario
   formContainer.addEventListener('submit', async (e) => {
     e.preventDefault();
     await guardarPerfil();
   });
 }
 
+/**
+ * Guarda el perfil y el equipamiento, y genera la primera semana.
+ */
 async function guardarPerfil() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -144,6 +189,7 @@ async function guardarPerfil() {
     return;
   }
 
+  // Recoger valores
   const perfil = {
     id: user.id,
     email: user.email,
@@ -165,6 +211,7 @@ async function guardarPerfil() {
     nivel_estres: 3
   };
 
+  // Guardar perfil
   const { error: perfilError } = await supabase
     .from('profiles')
     .upsert(perfil, { onConflict: 'id' });
@@ -175,40 +222,21 @@ async function guardarPerfil() {
     return;
   }
 
+  // Recoger ejercicios seleccionados por ID
   const checkboxes = document.querySelectorAll('input[name="equipamiento"]:checked');
-  const nombresSeleccionados = Array.from(checkboxes).map(cb => cb.value);
-  if (nombresSeleccionados.length === 0) {
+  const exerciseIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+  if (exerciseIds.length === 0) {
     alert('Selecciona al menos un ejercicio.');
     return;
   }
 
-  // Obtener los IDs reales desde la tabla exercises usando los nombres
-  let exercisesSupabase = [];
-  try {
-    const { data, error } = await supabase
-      .from('exercises')
-      .select('id, nombre')
-      .in('nombre', nombresSeleccionados);
-    if (error) throw error;
-    exercisesSupabase = data || [];
-  } catch (err) {
-    console.error('Error obteniendo ejercicios de Supabase:', err);
-    alert('Error al sincronizar el equipamiento. Intenta de nuevo.');
-    return;
-  }
-
-  if (exercisesSupabase.length === 0) {
-    alert('No se encontraron los ejercicios seleccionados en la base de datos.');
-    return;
-  }
-
-  // Mapear a formato para upsert: (user_id, exercise_id)
-  const equipamiento = exercisesSupabase.map(ex => ({
+  // Guardar equipamiento (upsert)
+  const equipamiento = exerciseIds.map(exId => ({
     user_id: user.id,
-    exercise_id: ex.id
+    exercise_id: exId
   }));
 
-  // Usar upsert en lugar de delete+insert para evitar "duplicate key"
   const { error: eqError } = await supabase
     .from('user_equipment')
     .upsert(equipamiento, { onConflict: 'user_id, exercise_id' });
@@ -219,6 +247,7 @@ async function guardarPerfil() {
     return;
   }
 
+  // Generar primera semana (o regenerar si ya existía)
   try {
     await generateFirstWeek(user.id);
     const { showScreen } = await import('./nav.js');
