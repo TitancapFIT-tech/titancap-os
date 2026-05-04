@@ -1,5 +1,6 @@
 // =====================================================
-// TitanCap.OS - js/nav.js (v3 - Ajustado PWA + Navegación)
+// TitanCap.OS - js/nav.js (v3.1 - Auditoría + PWA)
+// Control de pantallas, navegación y evento de instalación
 // =====================================================
 
 import { checkSession, renderAuthForm, signOut } from './auth.js';
@@ -28,7 +29,7 @@ export function showScreen(screenId, data = null) {
   // Cerrar modal de encuesta si estuviera abierto
   const modal = document.getElementById('survey-modal');
   if (modal) modal.classList.remove('active');
-  
+
   // Mostrar la pantalla solicitada
   const target = screens[screenId];
   if (target) target.classList.add('active');
@@ -84,7 +85,7 @@ export async function logout() {
  */
 export function initApp() {
   console.log('initApp() ejecutada');
-  
+
   // Capturar evento de instalación PWA lo antes posible
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
