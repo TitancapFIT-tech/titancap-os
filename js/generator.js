@@ -1,25 +1,62 @@
 // =====================================================
-// TitanCap.OS - js/generator.js (v3.1 - Optimizado y sin duplicados)
+// TitanCap.OS - js/generator.js (v3.2 - Auditoría final)
+// Lógica de generación de semanas, progresiones,
+// cálculo de volumen, Stress Index y periodización.
 // =====================================================
 
 import { supabase } from './supabase-client.js';
 import {
-  VOLUME_TABLE, BASELINE_HYPERTROPHY, SPLIT_PATTERNS, REP_RANGES,
-  ADJUSTMENT_FACTORS, INTERDEPENDENCIA_FATIGA, EXERCISE_PRIORITIES, DELOAD_RULES
+  VOLUME_TABLE,
+  BASELINE_HYPERTROPHY,
+  SPLIT_PATTERNS,
+  REP_RANGES,
+  ADJUSTMENT_FACTORS,
+  INTERDEPENDENCIA_FATIGA,
+  EXERCISE_PRIORITIES,
+  DELOAD_RULES,
+  STRESS_INDEX_COEFFICIENTS,  // nuevo import
+  BASICO_GRUPO_MAP,           // nuevo import
+  PESO_INCREMENTOS            // nuevo import (para futuras sugerencias)
 } from './config.js';
-import { sugerirPeso } from './erm.js';
+import { sugerirPeso, calcularE1RM } from './erm.js';
 import { determinarSistemaProgresion } from './progression.js';
 
+// ------------------------------------------------------
+// FUNCIÓN PÚBLICA: Calcular Stress Index por serie
+// Fórmula: SI = intercept + slope * RIR
+// Se redondea: >=0.5 arriba, <0.5 abajo
+// ------------------------------------------------------
+export function calcularStressIndex(tipoEjercicio, rirReportado) {
+  const coef = STRESS_INDEX_COEFFICIENTS[tipoEjercicio];
+  if (!coef) {
+    console.warn(`[StressIndex] Tipo de ejercicio no reconocido: ${tipoEjercicio}`);
+    return 0;
+  }
+  const raw = coef.intercept + coef.slope * rirReportado;
+  // Redondeo según documento
+  const decimal = raw - Math.floor(raw);
+  if (decimal >= 0.5) return Math.ceil(raw);
+  else return Math.floor(raw);
+}
+
+// ------------------------------------------------------
+// DETERMINAR NIVEL (principiante, intermedio, avanzado)
+// ------------------------------------------------------
 function determinarNivel(meses) {
   if (meses < 12) return 'principiante';
   if (meses >= 12 && meses < 24) return 'intermedio';
   return 'avanzado';
 }
 
+// ------------------------------------------------------
+// CALCULAR VOLUMEN PARA BÁSICOS (Chad Wesley Smith)
+// ------------------------------------------------------
 function calcularVolumenBasico(ejercicio, perfil) {
   const base = BASELINE_HYPERTROPHY[ejercicio] || 0;
   if (base === 0) return 0;
   let ajuste = 0;
+
+  // Aplicar factores modificadores (documento)
   if (perfil.genero === 'femenino') ajuste += ADJUSTMENT_FACTORS.genero.femenino;
   if (perfil.peso_kg < ADJUSTMENT_FACTORS.peso.ligero.umbral) ajuste += ADJUSTMENT_FACTORS.peso.ligero.ajuste;
   else if (perfil.peso_kg > ADJUSTMENT_FACTORS.peso.superpesado.umbral) ajuste += ADJUSTMENT_FACTORS.peso.superpesado.ajuste;
@@ -30,17 +67,41 @@ function calcularVolumenBasico(ejercicio, perfil) {
   else if (perfil.edad > ADJUSTMENT_FACTORS.edad.mayor.umbral) ajuste += ADJUSTMENT_FACTORS.edad.mayor.ajuste;
   if (perfil.dieta === 'superavit' && perfil.horas_sueno_promedio > 7.5) ajuste += ADJUSTMENT_FACTORS.estilo_vida.optimo.ajuste;
   else if (perfil.horas_sueno_promedio < 6 || perfil.dieta === 'deficit') ajuste += ADJUSTMENT_FACTORS.estilo_vida.estresado.ajuste;
+
+  // No bajar de 4 series/semana para un básico
   return Math.max(4, Math.round(base + ajuste));
 }
 
+// ------------------------------------------------------
+// CALCULAR VOLUMEN POR GRUPO MUSCULAR
+// Ajustado según nivel (MV para principiantes, ideal para avanzados)
+// ------------------------------------------------------
 function calcularVolumenGrupo(grupo, nivel, perfil) {
-  const range = VOLUME_TABLE[grupo][nivel];
-  let vol = range.MV[0];
-  if (perfil.dieta === 'superavit') vol = range.ideal[0];
-  else if (perfil.dieta === 'deficit') vol = Math.max(2, range.MV[0] - 2);
-  if (perfil.horas_sueno_promedio > 7.5) vol = Math.min(vol + 1, range.MRV[1] * 0.8);
+  const rango = VOLUME_TABLE[grupo];
+  if (!rango) return 4; // valor por defecto seguro
+
+  const range = rango[nivel];
+  // Seleccionar el volumen dentro del rango según nivel y perfil
+  let vol;
+  if (nivel === 'principiante') {
+    // Principiante: tercio bajo del rango (MV o bajo del ideal)
+    vol = range.MV[0] + Math.floor((range.MV[1] - range.MV[0]) / 3);
+  } else if (nivel === 'intermedio') {
+    // Intermedio: centro del rango ideal
+    vol = Math.floor((range.ideal[0] + range.ideal[1]) / 2);
+  } else {
+    // Avanzado: alto del ideal, rozando MRV
+    vol = range.ideal[1] + Math.floor((range.MRV[0] - range.ideal[1]) / 2);
+  }
+
+  // Ajustes por dieta y sueño
+  if (perfil.dieta === 'superavit') vol = Math.min(vol + 2, range.MRV[1]);
+  else if (perfil.dieta === 'deficit') vol = Math.max(2, vol - 2);
+
+  if (perfil.horas_sueno_promedio > 7.5) vol = Math.min(vol + 1, range.MRV[1]);
   else if (perfil.horas_sueno_promedio < 6) vol = Math.max(2, vol - 1);
-  return vol;
+
+  return Math.max(2, vol);
 }
 
 // ------------------------------------------------------
@@ -57,10 +118,12 @@ export async function generateFirstWeek(userId) {
   const splitConfig = SPLIT_PATTERNS[perfil.dias_disponibles] || SPLIT_PATTERNS[4];
   const { sistema } = determinarSistemaProgresion(perfil);
 
+  // Volumen objetivo por grupo (MV para principiantes, ideal para intermedios/avanzados)
   const volumenObjetivo = {};
   const grupos = ['pecho','espalda','deltoides','cuadriceps','isquios','gluteos','biceps','triceps','pantorrilla','abdomen','antebrazo'];
   grupos.forEach(g => { volumenObjetivo[g] = calcularVolumenGrupo(g, nivel, perfil); });
 
+  // Ajustar con básicos
   const basicosVol = {
     sentadilla: calcularVolumenBasico('sentadilla', perfil),
     press_banca: calcularVolumenBasico('press_banca', perfil),
@@ -70,6 +133,7 @@ export async function generateFirstWeek(userId) {
   volumenObjetivo['pecho'] = Math.max(volumenObjetivo['pecho'], basicosVol.press_banca);
   volumenObjetivo['espalda'] = Math.max(volumenObjetivo['espalda'], basicosVol.peso_muerto);
 
+  // Interdependencia de fatiga
   if (volumenObjetivo['pecho'] > 10) {
     volumenObjetivo['triceps'] = Math.round(volumenObjetivo['triceps'] * 0.7);
     volumenObjetivo['deltoides'] = Math.round(volumenObjetivo['deltoides'] * 0.8);
@@ -97,9 +161,10 @@ export async function generateFirstWeek(userId) {
 
   if (!weekProgram) throw new Error('Error creando semana');
 
-  // Eliminar días previos de manera segura
+  // Limpiar días previos (evitar duplicados)
   await supabase.from('workout_days').delete().eq('weekly_program_id', weekProgram.id);
 
+  // Construir días y ejercicios
   await construirDias(weekProgram, perfil, availableExercises, volumenObjetivo, {
     factorInt: 1.0,
     esSemanaPrueba: true,
@@ -110,6 +175,11 @@ export async function generateFirstWeek(userId) {
       peso_muerto: perfil.rm_peso_muerto || 0
     }
   });
+
+  // Crear bloque de entrenamiento si es WUP
+  if (sistema === 'wup') {
+    await crearBloqueEntrenamiento(userId, 1, 'acumulacion', today);
+  }
 
   return weekProgram;
 }
@@ -135,6 +205,7 @@ export async function generateNextWeek(userId, decision, deloadPorBasico = []) {
   const { data: equipment } = await supabase.from('user_equipment').select('exercise_id, exercises(*)').eq('user_id', userId);
   const availableExercises = equipment.map(e => e.exercises);
 
+  // Determinar factor de volumen/intensidad según decisión (deload o no)
   let factorVol = 1.0, factorInt = 1.0, weekType = 'normal';
   if (decision === 'deload' || decision === 'deload_parcial') {
     factorVol = DELOAD_RULES.volumePercent;
@@ -142,6 +213,7 @@ export async function generateNextWeek(userId, decision, deloadPorBasico = []) {
     weekType = 'descarga';
   }
 
+  // Volumen por grupo con factor aplicado
   const volumenObjetivo = {};
   const grupos = ['pecho','espalda','deltoides','cuadriceps','isquios','gluteos','biceps','triceps','pantorrilla','abdomen','antebrazo'];
   grupos.forEach(g => {
@@ -159,6 +231,7 @@ export async function generateNextWeek(userId, decision, deloadPorBasico = []) {
   volumenObjetivo['pecho'] = Math.max(volumenObjetivo['pecho'], basicosVol.press_banca);
   volumenObjetivo['espalda'] = Math.max(volumenObjetivo['espalda'], basicosVol.peso_muerto);
 
+  // Interdependencia de fatiga
   if (volumenObjetivo['pecho'] > 10) {
     volumenObjetivo['triceps'] = Math.round(volumenObjetivo['triceps'] * 0.7);
     volumenObjetivo['deltoides'] = Math.round(volumenObjetivo['deltoides'] * 0.8);
@@ -166,6 +239,9 @@ export async function generateNextWeek(userId, decision, deloadPorBasico = []) {
   if (volumenObjetivo['espalda'] > 12 && basicosVol.peso_muerto > 8) {
     volumenObjetivo['isquios'] = Math.round(volumenObjetivo['isquios'] * 0.7);
   }
+
+  // Si es deload parcial, reducir solo los básicos indicados
+  // (implementación futura)
 
   const fecha = new Date();
   fecha.setDate(fecha.getDate() + 1);
@@ -194,11 +270,17 @@ export async function generateNextWeek(userId, decision, deloadPorBasico = []) {
     deloadPorBasico
   });
 
+  // WUP: actualizar bloque actual o crear nuevo
+  if (sistema === 'wup') {
+    const fase = obtenerFaseWUP(newWeekNumber);
+    await crearBloqueEntrenamiento(userId, Math.ceil(newWeekNumber / 4), fase, fecha);
+  }
+
   return newWeek;
 }
 
 // ------------------------------------------------------
-// 3. CONSTRUIR DÍAS (BATCH INSERT OPTIMIZADO)
+// 3. CONSTRUIR DÍAS Y ASIGNAR EJERCICIOS (BATCH)
 // ------------------------------------------------------
 async function construirDias(weekProgram, perfil, availableExercises, volumenObjetivo, opts = {}) {
   const diasNombres = SPLIT_PATTERNS[perfil.dias_disponibles]?.days || SPLIT_PATTERNS[4].days;
@@ -209,6 +291,7 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
   const pesosIniciales = opts.pesosIniciales || {};
   const deloadPorBasico = opts.deloadPorBasico || [];
 
+  // Mapa de enfoques por split
   const enfoqueGrupos = {
     full_body: ['pecho','espalda','deltoides','cuadriceps','isquios','gluteos','biceps','triceps','pantorrilla','abdomen'],
     torso: ['pecho','espalda','deltoides','biceps','triceps'],
@@ -225,26 +308,28 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
     return pattern[dayIndex % pattern.length];
   }
 
+  // Frecuencia semanal de cada grupo
   const frecuenciaGrupo = {};
   for (let d = 0; d < diasNombres.length; d++) {
     const enfoque = getDayFocus(d);
     (enfoqueGrupos[enfoque] || []).forEach(g => frecuenciaGrupo[g] = (frecuenciaGrupo[g] || 0) + 1);
   }
 
+  // Volumen diario por grupo
   const volumenDiario = {};
   for (const [grupo, volTotal] of Object.entries(volumenObjetivo)) {
     if (frecuenciaGrupo[grupo]) volumenDiario[grupo] = Math.max(1, Math.round(volTotal / frecuenciaGrupo[grupo]));
   }
 
+  // Ondulación: determinar fase actual
   const dupCiclo = ['fuerza', 'volumen', 'potencia'];
   let dupIndex = 0;
-  let wupPhase = 'hipertrofia';
+  let wupPhase = null;
   if (sistemaProgresion === 'wup') {
-    const fases = ['hipertrofia', 'fuerza', 'pico', 'descarga'];
-    wupPhase = fases[(weekProgram.week_number - 1) % 4];
+    wupPhase = obtenerFaseWUP(weekProgram.week_number);
   }
 
-  // Arrays para batch insert
+  // Arrays para inserción masiva
   const diasParaInsertar = [];
   const ejerciciosParaInsertar = [];
 
@@ -263,7 +348,7 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
       day_number: d + 1,
       enfoque: enfoque,
       dup_type: dupType,
-      wup_phase: sistemaProgresion === 'wup' ? wupPhase : null
+      wup_phase: wupPhase // será null si no es WUP
     });
 
     const gruposDia = enfoqueGrupos[enfoque] || [];
@@ -273,6 +358,7 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
       const ejerciciosDisponibles = availableExercises.filter(ex => ex.grupo_muscular === grupo);
       if (ejerciciosDisponibles.length === 0) continue;
 
+      // Ordenar por prioridad
       const prioridades = EXERCISE_PRIORITIES[grupo] || [];
       ejerciciosDisponibles.sort((a, b) => {
         const idxA = prioridades.indexOf(a.nombre), idxB = prioridades.indexOf(b.nombre);
@@ -286,6 +372,11 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
         const ejercicio = ejerciciosDisponibles[i];
         let series = ejercicio.es_basico ? Math.min(4, seriesRestantes) : Math.min(3, seriesRestantes);
         series = Math.max(1, series);
+
+        // Deload parcial en básicos: reducir series si el ejercicio está en la lista
+        if (deloadPorBasico.includes(ejercicio.nombre)) {
+          series = Math.max(1, Math.floor(series * 0.6));
+        }
 
         const repsRange = getRepRange(ejercicio, perfil.objetivo, dupType, wupPhase);
         const rpeTarget = getRpeTarget(ejercicio, perfil.objetivo, dupType, wupPhase, factorInt);
@@ -306,7 +397,7 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
           rir_objetivo: rpeTarget.rir,
           peso_sugerido: pesoSugerido,
           dup_type: dupType,
-          wup_phase: sistemaProgresion === 'wup' ? wupPhase : null,
+          wup_phase: wupPhase,
           orden: orden++
         });
 
@@ -315,7 +406,7 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
     }
   }
 
-  // Inserción masiva de días
+  // Insertar días en bloque
   const { data: diasInsertados } = await supabase
     .from('workout_days')
     .insert(diasParaInsertar.map(({ temp_id, ...rest }) => rest))
@@ -323,7 +414,7 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
 
   if (!diasInsertados) throw new Error('Error insertando días');
 
-  // Mapeo de IDs temporales a reales
+  // Mapear IDs temporales a reales para los ejercicios
   const ejerciciosFinales = ejerciciosParaInsertar.map(ej => {
     const diaReal = diasInsertados.find((_, idx) => `temp_${idx}` === ej.dia_temp_id);
     if (!diaReal) throw new Error('No se encontró día para ejercicio');
@@ -342,7 +433,7 @@ async function construirDias(weekProgram, perfil, availableExercises, volumenObj
     };
   });
 
-  // Inserción masiva de ejercicios
+  // Insertar ejercicios en bloque
   if (ejerciciosFinales.length > 0) {
     const { error } = await supabase.from('workout_exercises').insert(ejerciciosFinales);
     if (error) console.error('Error insertando ejercicios:', error);
@@ -395,4 +486,34 @@ function mapearBasico(nombre) {
     'Press de banca plano con barra': 'press_banca'
   };
   return map[nombre] || 'press_banca';
+}
+
+// Obtener fase WUP según el número de semana
+function obtenerFaseWUP(weekNumber) {
+  const fases = ['hipertrofia', 'fuerza', 'pico', 'descarga'];
+  return fases[(weekNumber - 1) % 4];
+}
+
+// Crear/actualizar bloque de entrenamiento para WUP
+async function crearBloqueEntrenamiento(userId, blockNumber, tipoFase, fechaInicio) {
+  const { data: existing } = await supabase
+    .from('training_blocks')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('block_number', blockNumber)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase.from('training_blocks')
+      .update({ type: tipoFase, fecha_fin: null })
+      .eq('id', existing.id);
+  } else {
+    await supabase.from('training_blocks')
+      .insert({
+        user_id: userId,
+        block_number: blockNumber,
+        type: tipoFase,
+        fecha_inicio: fechaInicio.toISOString().split('T')[0]
+      });
+  }
 }
