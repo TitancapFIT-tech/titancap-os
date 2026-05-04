@@ -1,38 +1,28 @@
 // =====================================================
-// TitanCap.OS - js/auth.js (v3.2 - Auditoría final)
-// Autenticación + verificación de pago + PWA install
+// TitanCap.OS - js/auth.js (v3.3 - Limpio)
+// Autenticacion + verificacion de pago + PWA install
 // =====================================================
 
 import { supabase, checkPaymentStatus } from './supabase-client.js';
 
-// ------------------------------------------------------
-// Variables a nivel de módulo para PWA
-// ------------------------------------------------------
 let deferredPrompt = null;
 let pwaInstallInitialized = false;
 
-// ------------------------------------------------------
-// NUEVO: Inicializar listener de instalación PWA
-// Se debe llamar una vez al cargar la app (en index.html o dashboard)
-// ------------------------------------------------------
 export function initPWA() {
     if (pwaInstallInitialized) return;
     pwaInstallInitialized = true;
 
-    // Capturar el evento beforeinstallprompt (Android Chrome)
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
-        deferredPrompt = e; // Guardar para usarlo después del login
+        deferredPrompt = e;
         console.log('[PWA] beforeinstallprompt capturado y almacenado.');
     });
 
-    // Detectar cuando la app ya fue instalada
     window.addEventListener('appinstalled', () => {
-        console.log('[PWA] Aplicación instalada exitosamente.');
+        console.log('[PWA] Aplicacion instalada exitosamente.');
         deferredPrompt = null;
     });
 
-    // Dentro de initPWA, después de los listeners existentes
     window.addEventListener('triggerPWAInstall', (event) => {
         const userName = event.detail?.userName || 'Atleta';
         setTimeout(() => {
@@ -41,14 +31,9 @@ export function initPWA() {
     });
 }
 
-// ------------------------------------------------------
-// NUEVO: Disparar el flujo de instalación PWA
-// Muestra un modal premium con el nombre del usuario
-// ------------------------------------------------------
 function showInstallPrompt(userName) {
     const nombre = userName || 'Atleta';
 
-    // Crear modal de instalación (siempre visible)
     const overlay = document.createElement('div');
     overlay.className = 'pwa-install-overlay';
     overlay.innerHTML = `
@@ -62,7 +47,7 @@ function showInstallPrompt(userName) {
                 </svg>
             </div>
             <h2 class="pwa-install-title">${nombre}, te recomendamos instalar la app</h2>
-            <p class="pwa-install-subtitle">Accede más rápido a tu entrenamiento desde la pantalla de inicio.</p>
+            <p class="pwa-install-subtitle">Accede mas rapido a tu entrenamiento desde la pantalla de inicio.</p>
             <div class="pwa-install-actions">
                 <button class="pwa-install-btn" id="pwa-install-now">
                     <span>Instalar ahora</span>
@@ -77,7 +62,6 @@ function showInstallPrompt(userName) {
 
     document.body.appendChild(overlay);
 
-    // Sonido sutil al aparecer
     try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = audioCtx.createOscillator();
@@ -92,25 +76,21 @@ function showInstallPrompt(userName) {
         osc.stop(audioCtx.currentTime + 0.3);
     } catch (e) {}
 
-    // Animación de entrada
     requestAnimationFrame(() => {
         overlay.classList.add('active');
     });
 
-    // Cerrar al hacer clic en "Omitir"
     document.getElementById('pwa-install-skip').addEventListener('click', () => {
         overlay.classList.remove('active');
         setTimeout(() => overlay.remove(), 300);
     });
 
-    // Instalar al hacer clic en "Instalar ahora"
     document.getElementById('pwa-install-now').addEventListener('click', async () => {
         if (deferredPrompt) {
-            // Android / Chrome con soporte de instalación nativa
             try {
                 await deferredPrompt.prompt();
                 const { outcome } = await deferredPrompt.userChoice;
-                console.log(\`[PWA] Resultado de instalación: \${outcome}\`);
+                console.log(`[PWA] Resultado de instalacion: ${outcome}`);
                 deferredPrompt = null;
             } catch (err) {
                 console.warn('[PWA] Error al mostrar prompt:', err);
@@ -118,26 +98,18 @@ function showInstallPrompt(userName) {
             overlay.classList.remove('active');
             setTimeout(() => overlay.remove(), 300);
         } else {
-            // Fallback para iOS o navegadores sin evento
-            alert('Para instalar: usa el menú del navegador → "Añadir a pantalla de inicio".');
+            alert('Para instalar: usa el menu del navegador -> "Anadir a pantalla de inicio".');
         }
     });
 }
 
-// ------------------------------------------------------
-// Flujo post-login
-// Verifica pago, obtiene perfil y dispara instalación PWA
-// ------------------------------------------------------
 async function handlePostLogin(user) {
     const email = user.email;
-
-    // Verificar si el usuario ya pagó (placeholder Mercado Pago)
     const pagoAprobado = await checkPaymentStatus(email);
 
     if (pagoAprobado) {
-        console.log('[PostLogin] Pago confirmado. Preparando instalación PWA...');
+        console.log('[PostLogin] Pago confirmado. Preparando instalacion PWA...');
 
-        // Obtener nombre del perfil para personalizar el mensaje
         let userName = '';
         try {
             const { data: profile } = await supabase
@@ -146,39 +118,29 @@ async function handlePostLogin(user) {
                 .eq('id', user.id)
                 .single();
             userName = profile?.nombre || '';
-        } catch (e) {
-            // Si no hay perfil aún, usar email como fallback
-        }
+        } catch (e) {}
 
-        // Disparar instalación PWA
         showInstallPrompt(userName);
     } else {
         console.log('[PostLogin] Usuario sin pago registrado. Acceso limitado.');
-        // Aquí podría redirigir a una Landing de pago si se desea
     }
 }
 
-// ------------------------------------------------------
-// EXISTENTE (mejorado): Verifica sesión activa
-// Modificado para manejar fallos de pago sin bloquear la sesión
-// ------------------------------------------------------
 export async function checkSession() {
     const { data: { session }, error } = await supabase.auth.getSession();
     if (error) {
-        console.error('Error al obtener sesión:', error);
+        console.error('Error al obtener sesion:', error);
         return null;
     }
     if (session?.user) {
-        console.log('Sesión encontrada para:', session.user.email);
+        console.log('Sesion encontrada para:', session.user.email);
 
-        // Verificar si el usuario ya completó su perfil
         const { data: profile } = await supabase
             .from('profiles')
             .select('id')
             .eq('id', session.user.id)
             .single();
 
-        // Intentar verificar pago, pero si falla asumir que no pagó
         let pagoAprobado = false;
         try {
             pagoAprobado = await checkPaymentStatus(session.user.email);
@@ -196,10 +158,6 @@ export async function checkSession() {
     return null;
 }
 
-// ------------------------------------------------------
-// EXISTENTE (mejorado): Formulario de autenticación
-// Ahora con loader, feedback visual y flujo PWA post-login
-// ------------------------------------------------------
 export function renderAuthForm() {
     const container = document.getElementById('auth-container');
     container.innerHTML = `
@@ -208,7 +166,7 @@ export function renderAuthForm() {
             <p class="auth-subtitle">Accede a tu entrenamiento personalizado</p>
             
             <div id="auth-tabs" class="auth-tabs">
-                <button class="auth-tab active" data-tab="login">Iniciar Sesión</button>
+                <button class="auth-tab active" data-tab="login">Iniciar Sesion</button>
                 <button class="auth-tab" data-tab="register">Crear Cuenta</button>
             </div>
 
@@ -218,11 +176,11 @@ export function renderAuthForm() {
                     <input type="email" id="auth-email" placeholder="tu@email.com" required autocomplete="email">
                 </div>
                 <div class="input-group">
-                    <label>Contraseña</label>
-                    <input type="password" id="auth-password" placeholder="••••••••" required autocomplete="current-password">
+                    <label>Contrasena</label>
+                    <input type="password" id="auth-password" placeholder="********" required autocomplete="current-password">
                 </div>
                 <button type="submit" class="btn-primary" id="auth-submit-btn">
-                    <span id="auth-btn-text">Iniciar Sesión</span>
+                    <span id="auth-btn-text">Iniciar Sesion</span>
                     <span id="auth-btn-loader" class="auth-loader" style="display:none;">
                         <span class="spinner"></span> Conectando...
                     </span>
@@ -236,20 +194,18 @@ export function renderAuthForm() {
 
     let currentTab = 'login';
 
-    // Toggle entre Login y Registro
     document.querySelectorAll('.auth-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             currentTab = tab.dataset.tab;
             document.getElementById('auth-btn-text').textContent =
-                currentTab === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta';
+                currentTab === 'login' ? 'Iniciar Sesion' : 'Crear Cuenta';
             document.getElementById('auth-error').textContent = '';
             document.getElementById('auth-success').textContent = '';
         });
     });
 
-    // Envío del formulario
     document.getElementById('auth-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const email = document.getElementById('auth-email').value.trim();
@@ -263,7 +219,6 @@ export function renderAuthForm() {
         errorEl.textContent = '';
         successEl.textContent = '';
 
-        // Activar loader
         submitBtn.disabled = true;
         btnText.style.display = 'none';
         btnLoader.style.display = 'inline-flex';
@@ -279,21 +234,17 @@ export function renderAuthForm() {
                 return;
             }
 
-            // Login exitoso: mostrar feedback y ejecutar flujo post-login
             successEl.textContent = 'Accediendo a TitanCap.OS...';
 
-            // Flujo post-login: verificar pago y disparar PWA
             if (data?.user) {
                 await handlePostLogin(data.user);
             }
 
-            // Recargar para que initApp redirija correctamente
             setTimeout(() => {
                 window.location.reload();
             }, 500);
 
         } else {
-            // Registro
             const { data, error } = await supabase.auth.signUp({ email, password });
 
             if (error) {
@@ -304,15 +255,12 @@ export function renderAuthForm() {
                 return;
             }
 
-            // Éxito en registro
-            successEl.textContent = 'Cuenta creada. Ya puedes iniciar sesión.';
+            successEl.textContent = 'Cuenta creada. Ya puedes iniciar sesion.';
 
-            // Restaurar botón
             submitBtn.disabled = false;
             btnText.style.display = 'inline';
             btnLoader.style.display = 'none';
 
-            // Cambiar a la pestaña de login automáticamente
             setTimeout(() => {
                 document.querySelector('.auth-tab[data-tab="login"]').click();
             }, 800);
@@ -320,9 +268,6 @@ export function renderAuthForm() {
     });
 }
 
-// ------------------------------------------------------
-// EXISTENTE (sin cambios): Cerrar sesión
-// ------------------------------------------------------
 export async function signOut() {
     await supabase.auth.signOut();
 }
