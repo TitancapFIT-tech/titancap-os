@@ -1,14 +1,13 @@
 // =====================================================
-// TitanCap.OS - js/profile.js (v3.2 – Onboarding premium)
-// Formulario de perfil con catálogo desde Supabase,
-// precarga de datos existentes y validación mejorada.
+// TitanCap.OS - js/profile.js (v3.3 – Anti‑bloqueo iOS)
+// Formulario de perfil con redirección automática
+// si la sesión caduca en Safari / navegadores estrictos.
 // =====================================================
 
 import { supabase } from './supabase-client.js';
 import { generateFirstWeek } from './generator.js';
 import { showScreen } from './nav.js';
 
-// Mapeo de nombres de grupo para UI
 const grupoNames = {
   pecho: 'Pecho', espalda: 'Espalda', deltoides: 'Hombros',
   biceps: 'Bíceps', triceps: 'Tríceps', antebrazo: 'Antebrazos',
@@ -16,10 +15,6 @@ const grupoNames = {
   pantorrilla: 'Gemelos', abdomen: 'Abdomen'
 };
 
-/**
- * Renderiza el formulario de perfil, cargando ejercicios desde Supabase
- * y precargando los datos si el perfil ya existe.
- */
 export async function renderProfileForm() {
   const formContainer = document.getElementById('profile-form');
   if (!formContainer) return;
@@ -27,9 +22,19 @@ export async function renderProfileForm() {
   // Mostrar mini-loader mientras se cargan los datos
   formContainer.innerHTML = '<div class="spinner">Cargando configuración…</div>';
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    formContainer.innerHTML = '<p style="color:red;">Sesión expirada. Recarga la página.</p>';
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  // Si no hay usuario, redirigir automáticamente al login
+  if (userError || !user) {
+    console.warn('[Perfil] Sesión expirada o no encontrada. Redirigiendo a auth...');
+    formContainer.innerHTML = `
+      <p style="color:red;text-align:center;">Sesión expirada. Serás redirigido al inicio de sesión.</p>
+      <button class="btn-primary" onclick="location.reload()">Intentar de nuevo</button>
+    `;
+    // Redirigir automáticamente tras 3 segundos
+    setTimeout(() => {
+      showScreen('auth-screen');
+    }, 3000);
     return;
   }
 
@@ -51,7 +56,7 @@ export async function renderProfileForm() {
     return;
   }
 
-  // Obtener equipamiento ya seleccionado
+  // Obtener equipamiento ya seleccionado por el usuario (si existe)
   const { data: equipamientoExistente } = await supabase
     .from('user_equipment')
     .select('exercise_id')
@@ -161,7 +166,7 @@ export async function renderProfileForm() {
     </div>
   `;
 
-  // Construir dinámicamente la sección de equipamiento
+  // Construir la sección de equipamiento (checkboxes)
   const eqContainer = document.getElementById('equipment-groups');
   for (const [grupo, ejerciciosGrupo] of Object.entries(grouped)) {
     const div = document.createElement('div');
@@ -183,7 +188,7 @@ export async function renderProfileForm() {
     eqContainer.appendChild(div);
   }
 
-  // Efecto visual: al hacer clic en la etiqueta, se marca/desmarca
+  // Efecto visual al marcar/desmarcar
   eqContainer.addEventListener('change', (e) => {
     if (e.target.name === 'equipamiento') {
       e.target.closest('.checkbox-item')?.classList.toggle('selected', e.target.checked);
@@ -197,14 +202,11 @@ export async function renderProfileForm() {
   });
 }
 
-/**
- * Guarda el perfil y el equipamiento, y genera la primera semana.
- * Muestra un loader mientras trabaja.
- */
 async function guardarPerfil() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    alert('Sesión no encontrada. Vuelve a iniciar sesión.');
+    alert('Sesión no encontrada. Serás redirigido al inicio de sesión.');
+    showScreen('auth-screen');
     return;
   }
 
@@ -212,12 +214,10 @@ async function guardarPerfil() {
   const btnLoader = document.getElementById('btn-loader');
   const btnGuardar = document.getElementById('btn-guardar-perfil');
 
-  // Deshabilitar botón y mostrar loader
   btnGuardar.disabled = true;
   btnTexto.style.display = 'none';
   btnLoader.style.display = 'inline';
 
-  // Recoger valores del formulario
   const perfil = {
     id: user.id,
     email: user.email,
@@ -239,7 +239,6 @@ async function guardarPerfil() {
     nivel_estres: 3
   };
 
-  // Guardar perfil
   const { error: perfilError } = await supabase
     .from('profiles')
     .upsert(perfil, { onConflict: 'id' });
@@ -253,7 +252,6 @@ async function guardarPerfil() {
     return;
   }
 
-  // Recoger ejercicios seleccionados
   const checkboxes = document.querySelectorAll('input[name="equipamiento"]:checked');
   const exerciseIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
 
@@ -265,7 +263,6 @@ async function guardarPerfil() {
     return;
   }
 
-  // Guardar equipamiento (upsert)
   const equipamiento = exerciseIds.map(exId => ({
     user_id: user.id,
     exercise_id: exId
@@ -284,10 +281,8 @@ async function guardarPerfil() {
     return;
   }
 
-  // Generar primera semana
   try {
     await generateFirstWeek(user.id);
-    // Ir al dashboard (donde se mostrará la instalación PWA si corresponde)
     showScreen('dashboard-screen');
   } catch (err) {
     console.error('Error al generar rutina:', err);
