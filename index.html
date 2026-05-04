@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0a0a0a">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="apple-mobile-web-app-title" content="TitanCap">
@@ -69,14 +70,19 @@
         </div>
     </div>
 
-    <script type="module" src="js/nav.js"></script>
-    <script>
+    <script type="module">
+        import { initApp } from './js/nav.js';
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js');
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('SW registrado:', reg.scope))
+                    .catch(err => console.warn('SW no registrado:', err));
             });
         }
+        // Iniciar la aplicación inmediatamente
+        console.log('Iniciando TitanCap.OS...');
+        initApp();
     </script>
 </body>
 </html>
