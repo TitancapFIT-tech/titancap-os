@@ -83,11 +83,11 @@ export async function logout() {
  * Incluye un timeout de seguridad por si la verificación se bloquea.
  */
 export function initApp() {
+  console.log('initApp() ejecutada');
+  
   // Capturar evento de instalación PWA lo antes posible
   window.addEventListener('beforeinstallprompt', (e) => {
-    // Prevenir que el navegador muestre el diálogo automático
     e.preventDefault();
-    // Guardar el evento en window para que dashboard.js lo use
     window.__pwaDeferredPrompt = e;
     console.log('Evento beforeinstallprompt capturado');
   });
@@ -96,36 +96,35 @@ export function initApp() {
   window.addEventListener('appinstalled', () => {
     console.log('TitanCap.OS instalada exitosamente');
     window.__pwaDeferredPrompt = null;
-    // Eliminar modal de instalación si existe
     const modal = document.querySelector('.install-modal-glass');
     if (modal) modal.remove();
   });
 
   // Mostrar pantalla de carga
   showScreen('loading-screen');
+  console.log('Pantalla de carga mostrada');
 
-  // Timeout de seguridad: si tras 6 segundos sigue en loading, forzamos auth
+  // Timeout de seguridad: si tras 8 segundos sigue en loading, forzamos auth
   let resolved = false;
   const safetyTimeout = setTimeout(() => {
     if (!resolved && screens['loading-screen']?.classList.contains('active')) {
       console.warn('Timeout de verificación alcanzado. Mostrando auth por seguridad.');
       showScreen('auth-screen');
     }
-  }, 6000);
+  }, 8000);
 
   // Verificar sesión
+  console.log('Verificando sesión...');
   checkSession()
     .then(sessionData => {
       resolved = true;
       clearTimeout(safetyTimeout);
+      console.log('Sesión verificada:', sessionData);
       if (!sessionData) {
-        // No hay sesión activa
         showScreen('auth-screen');
       } else if (!sessionData.hasProfile) {
-        // Sesión activa pero falta perfil de atleta
         showScreen('profile-screen');
       } else {
-        // Sesión activa con perfil completo -> Dashboard
         showScreen('dashboard-screen');
       }
     })
