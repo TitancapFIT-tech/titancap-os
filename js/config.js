@@ -1,7 +1,6 @@
 // =====================================================
-// TitanCap.OS - js/config.js (v3 - Auditoría Completa)
-// Tablas científicas, constantes y catálogo de ejercicios
-// Extendido con DUP, WUP, MRV y deload individualizado
+// TitanCap.OS - js/config.js (v3.1 - Auditoría Completa)
+// Tablas científicas, constantes y catálogo completo
 // =====================================================
 
 // ------------------------------------------------------
@@ -223,7 +222,7 @@ export const DELOAD_RULES = {
     intensityPercent: 0.70,
     durationDays: 7,
     maxDurationDays: 10,
-    caidaE1RMPorcentaje: 5, // % de caída en 2 semanas para activar deload
+    caidaE1RMPorcentaje: 5,
     triggers: [
         'Caída sostenida del e1RM > 5% en 2 semanas',
         'Dolor articular que aumenta',
