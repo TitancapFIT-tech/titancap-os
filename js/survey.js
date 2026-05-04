@@ -1,26 +1,28 @@
 // =====================================================
-// TitanCap.OS - js/survey.js (v3 - Auditoría Completa)
-// Encuesta de fatiga post-semana con evaluación de e1RM,
+// TitanCap.OS - js/survey.js (v3.1 - Auditoría Completa)
+// Encuesta de fatiga post-semana, evaluación de e1RM,
 // Stress Index semanal, deload individualizado y MRV
 // =====================================================
 
 import { supabase } from './supabase-client.js';
-import { DELOAD_RULES, STRESS_INDEX_COEFFICIENTS } from './config.js';
+import { DELOAD_RULES, STRESS_INDEX_COEFFICIENTS, BASICO_GRUPO_MAP } from './config.js';
 import { generateNextWeek } from './generator.js';
 import { obtenerHistorialE1RM, necesitaDeloadPorE1RM } from './erm.js';
 import { showScreen } from './nav.js';
 
 let currentWeekId = null;
 
-// ------------------------------------------------------
-// 1. ABRIR MODAL DE ENCUESTA
-// ------------------------------------------------------
+/**
+ * Abre el modal con el formulario de encuesta de fatiga
+ * para la semana recién completada.
+ * @param {string} weekId - ID del weekly_program en Supabase.
+ */
 export async function openSurvey(weekId) {
   currentWeekId = weekId;
   const modal = document.getElementById('survey-modal');
   const formContainer = document.getElementById('survey-form');
 
-  // Obtener datos de la semana actual
+  // Obtener número de semana para el título
   const { data: week } = await supabase
     .from('weekly_programs')
     .select('week_number')
@@ -29,7 +31,7 @@ export async function openSurvey(weekId) {
 
   formContainer.innerHTML = `
     <h2>Encuesta Fin de Semana ${week?.week_number || ''}</h2>
-    <p>Responde para ajustar tu siguiente ciclo con precisión.</p>
+    <p>Responde con sinceridad. Con esta información el sistema ajusta tu siguiente semana.</p>
 
     <div class="input-group">
       <label>Horas de sueño promedio esta semana</label>
@@ -103,23 +105,21 @@ export async function openSurvey(weekId) {
     </div>
 
     <div class="input-group">
-      <label>Comentarios adicionales</label>
-      <textarea id="survey-comentarios" rows="2" placeholder="Opcional..."></textarea>
+      <label>Comentarios adicionales (opcional)</label>
+      <textarea id="survey-comentarios" rows="2" placeholder="Cualquier observación..."></textarea>
     </div>
 
     <button type="submit" class="btn-primary">Enviar y programar siguiente semana</button>
   `;
 
-  // Mostrar modal
   modal.classList.add('active');
 
-  // Listener para enviar
   formContainer.addEventListener('submit', async (e) => {
     e.preventDefault();
     await procesarEncuesta();
   });
 
-  // Cerrar modal al hacer clic fuera
+  // Cerrar modal si se hace clic fuera
   modal.addEventListener('click', (e) => {
     if (e.target === modal) {
       modal.classList.remove('active');
@@ -127,9 +127,14 @@ export async function openSurvey(weekId) {
   });
 }
 
-// ------------------------------------------------------
-// 2. PROCESAR ENCUESTA Y GUARDAR FEEDBACK
-// ------------------------------------------------------
+/**
+ * Procesa las respuestas de la encuesta:
+ * 1. Guarda el feedback en la base de datos.
+ * 2. Calcula el Stress Index semanal.
+ * 3. Evalúa los triggers de deload (e1RM, fatiga subjetiva).
+ * 4. Registra el MRV individual si corresponde.
+ * 5. Genera la siguiente semana con la decisión tomada.
+ */
 async function procesarEncuesta() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
@@ -151,12 +156,9 @@ async function procesarEncuesta() {
   };
 
   // Guardar feedback en Supabase
-  const { error } = await supabase
-    .from('weekly_feedback')
-    .insert(feedback);
-
+  const { error } = await supabase.from('weekly_feedback').insert(feedback);
   if (error) {
-    alert('Error al guardar encuesta: ' + error.message);
+    alert('Error al guardar la encuesta: ' + error.message);
     return;
   }
 
@@ -167,11 +169,15 @@ async function procesarEncuesta() {
   await evaluarYGenerarSiguiente(user.id, feedback);
 }
 
-// ------------------------------------------------------
-// 3. EVALUAR FATIGA Y DECIDIR TIPO DE SEMANA (NORMAL/DELOAD)
-// ------------------------------------------------------
+/**
+ * Evalúa la fatiga del usuario combinando:
+ * - Trigger A: caída del e1RM en básicos (individualizado).
+ * - Trigger B: fatiga subjetiva (sueño, estrés, dolor).
+ * - Stress Index semanal (para el MRV).
+ * Decide si la semana siguiente es 'normal', 'deload' o 'deload_parcial'.
+ */
 async function evaluarYGenerarSiguiente(userId, feedback) {
-  // Obtener perfil
+  // Obtener perfil (para el historial de e1RM)
   const { data: perfil } = await supabase
     .from('profiles')
     .select('*')
@@ -182,7 +188,7 @@ async function evaluarYGenerarSiguiente(userId, feedback) {
   const stressPorGrupo = await calcularStressIndexSemanal(currentWeekId);
   console.log('Stress Index semanal por grupo:', stressPorGrupo);
 
-  // Evaluar deload por cada básico (Trigger A: caída de e1RM)
+  // Evaluar deload por cada básico (Trigger A: caída de e1RM > 5% en 2 semanas)
   const basicos = [
     { nombre: 'Sentadilla libre trasera', clave: 'sentadilla' },
     { nombre: 'Press de banca plano con barra', clave: 'press_banca' },
@@ -193,12 +199,14 @@ async function evaluarYGenerarSiguiente(userId, feedback) {
 
   for (const basico of basicos) {
     const historial = await obtenerHistorialE1RM(userId, basico.nombre, 4);
-    if (necesitaDeloadPorE1RM(historial, 5)) { // 5% de caída en 2 semanas
+    if (necesitaDeloadPorE1RM(historial, DELOAD_RULES.caidaE1RMPorcentaje || 5)) {
       basicosEnDeload.push(basico.clave);
-      console.log(`Deload detectado para: ${basico.nombre}`);
+      console.log(`Deload por e1RM detectado para: ${basico.nombre}`);
 
-      // Guardar MRV individual: el Stress Index actual es el máximo para este básico
-      await guardarMRV(userId, basico.clave, stressPorGrupo, historial[0]?.e1rm || 0);
+      // Guardar MRV individual: el Stress Index actual del grupo muscular asociado
+      const grupo = BASICO_GRUPO_MAP[basico.clave] || basico.clave;
+      const siGrupo = stressPorGrupo[grupo] || 0;
+      await guardarMRV(userId, basico.clave, grupo, siGrupo, historial[0]?.e1rm || 0);
     }
   }
 
@@ -209,38 +217,26 @@ async function evaluarYGenerarSiguiente(userId, feedback) {
   const dolorArticular = feedback.dolores_articulares;
   const rendimientoMuyBajo = feedback.rendimiento_percibido <= 4;
 
-  if (feedback.fatiga_cronica) {
+  if (feedback.fatiga_cronica || (dolorArticular && rendimientoMuyBajo) || (suenoMalo && estresAlto)) {
     decision = 'deload';
   }
 
-  if (dolorArticular && rendimientoMuyBajo) {
-    decision = 'deload';
-  }
-
-  if (suenoMalo && estresAlto) {
-    decision = 'deload';
-  }
-
-  // Si hay básicos en deload pero la decisión general es normal, hacer deload parcial
-  if (basicosEnDeload.length > 0 && decision === 'normal') {
+  // Si hay básicos individuales en deload pero no se cumple deload total, hacemos deload parcial
+  if (basicosEnDeload.length > 0 && decision !== 'deload') {
     decision = 'deload_parcial';
-  } else if (basicosEnDeload.length > 0) {
-    decision = 'deload';
   }
 
-  // Si todo va bien
+  // Si todo va perfecto, forzamos normal (incluso si básicos estaban en deload pero la recuperación fue buena)
   if (feedback.rendimiento_percibido >= 7 && !feedback.fallo_pesos_asignados && !dolorArticular && feedback.horas_sueno_promedio >= 7 && feedback.nivel_estres <= 3) {
     decision = 'normal';
-    // Limpiar básicos en deload si la recuperación fue buena
-    basicosEnDeload.length = 0;
+    basicosEnDeload.length = 0; // Limpiar deload individual si hay signos de buena recuperación
   }
 
   console.log('Decisión:', decision, 'Básicos en deload:', basicosEnDeload);
 
-  // Generar la siguiente semana
   try {
-    const nuevaSemana = await generateNextWeek(userId, decision, basicosEnDeload);
-    const tipoSemana = decision === 'deload' || decision === 'deload_parcial' ? 'descarga' : 'progresión';
+    await generateNextWeek(userId, decision, basicosEnDeload);
+    const tipoSemana = (decision === 'deload' || decision === 'deload_parcial') ? 'descarga' : 'progresión';
     alert(`Próxima semana generada: Semana de ${tipoSemana}`);
     showScreen('dashboard-screen');
   } catch (err) {
@@ -249,11 +245,11 @@ async function evaluarYGenerarSiguiente(userId, feedback) {
   }
 }
 
-// ------------------------------------------------------
-// 4. CALCULAR STRESS INDEX SEMANAL POR GRUPO MUSCULAR
-// ------------------------------------------------------
+/**
+ * Calcula el Stress Index semanal sumando todas las series completadas
+ * de la semana agrupadas por grupo muscular.
+ */
 async function calcularStressIndexSemanal(weekId) {
-  // Obtener todas las series completadas de la semana
   const { data: sets } = await supabase
     .from('workout_sets')
     .select(`
@@ -269,9 +265,7 @@ async function calcularStressIndexSemanal(weekId) {
 
   if (!sets || sets.length === 0) return {};
 
-  // Agrupar por grupo muscular
   const stressPorGrupo = {};
-
   sets.forEach(s => {
     const ejercicio = s.workout_exercises?.exercises;
     if (!ejercicio) return;
@@ -286,38 +280,28 @@ async function calcularStressIndexSemanal(weekId) {
     stressPorGrupo[grupo] += si;
   });
 
-  // Redondear
+  // Redondear a 1 decimal
   for (const grupo in stressPorGrupo) {
     stressPorGrupo[grupo] = Math.round(stressPorGrupo[grupo] * 10) / 10;
   }
-
   return stressPorGrupo;
 }
 
-// ------------------------------------------------------
-// 5. GUARDAR MRV INDIVIDUAL (Máximo Volumen Recuperable)
-// ------------------------------------------------------
-async function guardarMRV(userId, basicoClave, stressPorGrupo, e1rmActual) {
-  // Mapear básico a grupo muscular principal
-  const mapBasicoGrupo = {
-    sentadilla: 'cuadriceps',
-    press_banca: 'pecho',
-    peso_muerto: 'espalda'
-  };
+/**
+ * Guarda el MRV individual (Volumen Máximo Recuperable) de un básico
+ * cuando su e1RM cae, registrando el Stress Index del grupo muscular
+ * en ese momento como límite superior para futuros bloques.
+ */
+async function guardarMRV(userId, basicExercise, grupoMuscular, stressIndexActual, e1rmActual) {
+  if (stressIndexActual <= 0) return;
 
-  const grupo = mapBasicoGrupo[basicoClave];
-  const siGrupo = stressPorGrupo[grupo] || 0;
-
-  if (siGrupo <= 0) return;
-
-  // Guardar en tabla user_mrv
   const { error } = await supabase
     .from('user_mrv')
     .upsert({
       user_id: userId,
-      basic_exercise: basicoClave,
-      grupo_muscular: grupo,
-      stress_index_max: siGrupo,
+      basic_exercise: basicExercise,
+      grupo_muscular: grupoMuscular,
+      stress_index_max: stressIndexActual,
       e1rm_at_mrv: e1rmActual,
       fecha_registro: new Date().toISOString().split('T')[0]
     }, { onConflict: 'user_id, basic_exercise' });
@@ -325,6 +309,6 @@ async function guardarMRV(userId, basicoClave, stressPorGrupo, e1rmActual) {
   if (error) {
     console.error('Error guardando MRV:', error);
   } else {
-    console.log(`MRV guardado para ${basicoClave}: SI=${siGrupo}, e1RM=${e1rmActual}`);
+    console.log(`MRV actualizado: ${basicExercise} SI=${stressIndexActual}, e1RM=${e1rmActual}`);
   }
 }
