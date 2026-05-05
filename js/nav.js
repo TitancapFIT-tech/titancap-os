@@ -1,5 +1,5 @@
 // =====================================================
-// TitanCap.OS - js/nav.js (v3.3 – Anti‑bloqueo)
+// TitanCap.OS - js/nav.js (v3.4 – Con modal de bienvenida)
 // Control de pantallas, enrutamiento y arranque
 // =====================================================
 
@@ -49,6 +49,8 @@ export function showScreen(screenId, data = null) {
   switch (screenId) {
     case 'auth-screen':
       renderAuthForm();
+      // Verificar si procede el modal de bienvenida post‑pago
+      checkAndShowWelcomeModal();
       break;
     case 'profile-screen':
       renderProfileForm();
@@ -60,6 +62,47 @@ export function showScreen(screenId, data = null) {
       if (data?.dayId) renderWorkoutDay(data.dayId);
       break;
   }
+}
+
+/**
+ * Comprueba si el usuario viene de un pago exitoso (parámetro ?payment=success)
+ * y si no se ha mostrado antes el modal de bienvenida. Si se cumplen las condiciones,
+ * lo muestra. Al cerrar, guarda la preferencia en localStorage y limpia el parámetro.
+ */
+function checkAndShowWelcomeModal() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const isPaymentSuccess = urlParams.get('payment') === 'success';
+  const alreadyShown = localStorage.getItem('welcomeModalShown') === 'true';
+
+  if (!isPaymentSuccess || alreadyShown) return;
+
+  const welcomeModal = document.getElementById('welcome-modal');
+  if (!welcomeModal) return;
+
+  // Mostrar el modal
+  welcomeModal.classList.add('active');
+
+  // Botón de cierre
+  const closeBtn = document.getElementById('welcome-modal-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      welcomeModal.classList.remove('active');
+      localStorage.setItem('welcomeModalShown', 'true');
+      // Limpiar el parámetro de la URL para que no reaparezca al refrescar
+      if (window.history && window.history.replaceState) {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    });
+  }
+
+  // Cerrar al hacer clic fuera del contenido
+  welcomeModal.addEventListener('click', (e) => {
+    if (e.target === welcomeModal) {
+      welcomeModal.classList.remove('active');
+      localStorage.setItem('welcomeModalShown', 'true');
+    }
+  });
 }
 
 /**
