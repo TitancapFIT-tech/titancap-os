@@ -1018,3 +1018,135 @@ select {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
 }
+
+/* =====================================================
+   NUEVO: ESTILOS DEL MODAL DE BIENVENIDA POST-PAGO
+   Agregados para la funcionalidad de bienvenida
+   tras redirección de Mercado Pago.
+   ===================================================== */
+.welcome-modal-glass {
+    background: rgba(0, 0, 0, 0.88);
+}
+.welcome-modal-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 28px 22px;
+    width: 100%;
+    max-width: 440px;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: modalSlide 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    text-align: center;
+}
+.welcome-modal-icon {
+    margin-bottom: 16px;
+}
+.welcome-modal-title {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+.welcome-modal-message {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+    line-height: 1.5;
+}
+.welcome-modal-steps {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 24px;
+    text-align: left;
+}
+.welcome-modal-steps li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 14px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
+.step-number {
+    background: var(--success);
+    color: #000;
+    font-weight: 700;
+    font-size: 0.8rem;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.welcome-modal-downloads {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+.welcome-download-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    border: 1px solid var(--border);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+}
+.download-primary {
+    background: rgba(48, 209, 88, 0.12);
+    border-color: var(--success);
+    color: var(--success);
+}
+.download-primary:hover {
+    background: rgba(48, 209, 88, 0.22);
+    transform: scale(1.02);
+}
+.download-primary small {
+    font-weight: 400;
+    opacity: 0.85;
+}
+.download-secondary {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+.download-secondary:hover {
+    background: var(--bg-card-hover);
+    border-color: rgba(255,255,255,0.3);
+    transform: scale(1.02);
+}
+.welcome-close-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #ffffff 0%, #e0e0e0 100%);
+    color: var(--bg-primary);
+    border: none;
+    padding: 16px;
+    border-radius: var(--radius-md);
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all var(--transition-smooth);
+    letter-spacing: 0.3px;
+    box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
+}
+.welcome-close-btn:hover {
+    box-shadow: 0 8px 25px rgba(255, 255, 255, 0.4);
+    transform: scale(1.02);
+}
+.welcome-close-btn:active {
+    transform: scale(0.97);
+}
