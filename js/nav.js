@@ -1,5 +1,5 @@
 // =====================================================
-// TitanCap.OS - js/nav.js (v3.4 – Con modal de bienvenida)
+// TitanCap.OS - js/nav.js (v3.5 – Modal de bienvenida primera visita)
 // Control de pantallas, enrutamiento y arranque
 // =====================================================
 
@@ -40,7 +40,6 @@ export function showScreen(screenId, data = null) {
     console.log('[nav] Pantalla activa:', screenId);
   } else {
     console.error('[nav] No se encontró pantalla:', screenId);
-    // Respaldo: si no existe, mostramos auth
     const authFallback = screens['auth-screen'];
     if (authFallback) authFallback.classList.add('active');
   }
@@ -49,8 +48,8 @@ export function showScreen(screenId, data = null) {
   switch (screenId) {
     case 'auth-screen':
       renderAuthForm();
-      // Verificar si procede el modal de bienvenida post‑pago
-      checkAndShowWelcomeModal();
+      // Mostrar modal de bienvenida solo la primera vez
+      showWelcomeModalOnce();
       break;
     case 'profile-screen':
       renderProfileForm();
@@ -65,16 +64,12 @@ export function showScreen(screenId, data = null) {
 }
 
 /**
- * Comprueba si el usuario viene de un pago exitoso (parámetro ?payment=success)
- * y si no se ha mostrado antes el modal de bienvenida. Si se cumplen las condiciones,
- * lo muestra. Al cerrar, guarda la preferencia en localStorage y limpia el parámetro.
+ * Muestra el modal de bienvenida la primera vez que se visita la app
+ * (controlado por localStorage). Si ya se mostró antes, no hace nada.
  */
-function checkAndShowWelcomeModal() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const isPaymentSuccess = urlParams.get('payment') === 'success';
-  const alreadyShown = localStorage.getItem('welcomeModalShown') === 'true';
-
-  if (!isPaymentSuccess || alreadyShown) return;
+function showWelcomeModalOnce() {
+  // Si ya se mostró antes, salir
+  if (localStorage.getItem('welcomeModalShown') === 'true') return;
 
   const welcomeModal = document.getElementById('welcome-modal');
   if (!welcomeModal) return;
@@ -82,17 +77,17 @@ function checkAndShowWelcomeModal() {
   // Mostrar el modal
   welcomeModal.classList.add('active');
 
+  // Marcar como mostrado al cerrar
+  const markAsShown = () => {
+    localStorage.setItem('welcomeModalShown', 'true');
+  };
+
   // Botón de cierre
   const closeBtn = document.getElementById('welcome-modal-close');
   if (closeBtn) {
     closeBtn.addEventListener('click', () => {
       welcomeModal.classList.remove('active');
-      localStorage.setItem('welcomeModalShown', 'true');
-      // Limpiar el parámetro de la URL para que no reaparezca al refrescar
-      if (window.history && window.history.replaceState) {
-        const cleanUrl = window.location.pathname + window.location.hash;
-        window.history.replaceState({}, document.title, cleanUrl);
-      }
+      markAsShown();
     });
   }
 
@@ -100,7 +95,7 @@ function checkAndShowWelcomeModal() {
   welcomeModal.addEventListener('click', (e) => {
     if (e.target === welcomeModal) {
       welcomeModal.classList.remove('active');
-      localStorage.setItem('welcomeModalShown', 'true');
+      markAsShown();
     }
   });
 }
